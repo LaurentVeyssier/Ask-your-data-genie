@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ask Your Data - AI Data Analyst</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
+    <!-- Marked.js for markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Custom Style -->
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Top Navigation -->
+        <header class="app-header">
+            <div class="header-logo">
+                <i class="fa-solid fa-chart-pie logo-icon"></i>
+                <div class="logo-text">
+                    <h1>AskYourData</h1>
+                    <span>AI Data Analyst Agent</span>
+                </div>
+            </div>
+            <div class="header-controls">
+                <div class="runtime-selector">
+                    <label for="runtime-mode"><i class="fa-solid fa-server"></i> Runtime:</label>
+                    <select id="runtime-mode">
+                        <option value="local">Local Agent (Subprocess)</option>
+                        <option value="deployed">Deployed Agent (Cloud)</option>
+                    </select>
+                </div>
+                <div class="session-badge" id="session-badge">
+                    <i class="fa-solid fa-fingerprint"></i> <span id="session-id-display">Generating...</span>
+                </div>
+                <button id="new-chat-btn" class="header-btn" title="New Session">
+                    <i class="fa-solid fa-rotate"></i> Reset
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Workspace -->
+        <main class="app-workspace">
+            <!-- Left Panel: Chat and Data Upload -->
+            <section class="workspace-panel chat-panel">
+                <!-- File Upload Area -->
+                <div class="upload-section">
+                    <div id="dropzone" class="dropzone">
+                        <input type="file" id="file-input" accept=".csv" class="file-input" />
+                        <div class="dropzone-content">
+                            <i class="fa-solid fa-cloud-arrow-up upload-icon"></i>
+                            <p class="upload-title">Drag & Drop CSV here</p>
+                            <p class="upload-subtitle">or click to browse files</p>
+                        </div>
+                    </div>
+                    <div id="file-status" class="file-status hidden">
+                        <div class="file-info">
+                            <i class="fa-solid fa-file-csv csv-icon"></i>
+                            <div class="file-meta">
+                                <span id="file-name">filename.csv</span>
+                                <span id="file-size">0 KB</span>
+                            </div>
+                        </div>
+                        <button id="remove-file-btn" class="remove-btn" title="Remove File">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Chat History -->
+                <div class="chat-history" id="chat-history">
+                    <div class="message system-message">
+                        <div class="message-avatar">
+                            <i class="fa-solid fa-robot"></i>
+                        </div>
+                        <div class="message-content">
+                            <p>Hello! I am your AI Data Analyst. Upload a CSV file and ask me to analyze it, compute statistics, or generate charts using natural language.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Input controls -->
+                <div class="chat-input-container">
+                    <textarea id="chat-input" placeholder="Ask a question about your data..." rows="1"></textarea>
+                    <button id="send-btn" class="send-btn" disabled>
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Right Panel: Interactive Visualizations -->
+            <section class="workspace-panel viz-panel">
+                <div class="panel-header">
+                    <h2><i class="fa-solid fa-chart-line"></i> Interactive Output Dashboard</h2>
+                    <div class="viz-actions">
+                        <button id="export-chart-btn" class="viz-btn hidden" title="Export HTML">
+                            <i class="fa-solid fa-download"></i> Export
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="viz-container" id="viz-container">
+                    <div class="viz-empty-state" id="viz-empty-state">
+                        <div class="empty-icon-wrapper">
+                            <i class="fa-solid fa-chart-column empty-icon"></i>
+                        </div>
+                        <h3>No visualization generated yet</h3>
+                        <p>Ask the agent to create a plot or graph to see interactive visualizations render here.</p>
+                    </div>
+                    <!-- Target for Plotly chart -->
+                    <div id="plotly-chart" class="plotly-chart hidden"></div>
+                </div>
+
+                <!-- Artifacts Log -->
+                <div class="artifacts-log hidden" id="artifacts-log">
+                    <h4><i class="fa-solid fa-box-archive"></i> Session Artifacts</h4>
+                    <ul class="artifacts-list" id="artifacts-list"></ul>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="/static/app.js"></script>
+</body>
+</html>

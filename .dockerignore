@@ -1,0 +1,16 @@
+.git
+.gitignore
+.dockerignore
+.venv
+.adk
+.google-agents-cli
+scratch
+tests
+GEMINI.md
+*.log
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.DS_Store
+Thumbs.db
