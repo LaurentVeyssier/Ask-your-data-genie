@@ -39,15 +39,33 @@
                 <div class="session-badge" id="session-badge">
                     <i class="fa-solid fa-fingerprint"></i> <span id="session-id-display">Generating...</span>
                 </div>
-                <button id="new-chat-btn" class="header-btn" title="New Session">
-                    <i class="fa-solid fa-rotate"></i> Reset
+                <div class="user-profile" id="user-profile-badge">
+                    <i class="fa-solid fa-user-tag"></i> <span id="user-email-display">Loading...</span>
+                </div>
+                <button id="logout-btn" class="header-btn secondary-btn" title="Logout">
+                    <i class="fa-solid fa-right-from-bracket"></i> Logout
                 </button>
             </div>
         </header>
 
         <!-- Main Workspace -->
         <main class="app-workspace">
-            <!-- Left Panel: Chat and Data Upload -->
+            <!-- Left Sidebar: Session History -->
+            <section class="workspace-sidebar" id="sidebar">
+                <div class="sidebar-header">
+                    <h3><i class="fa-solid fa-history"></i> Sessions</h3>
+                    <button id="new-session-sidebar-btn" class="sidebar-btn" title="New Session">
+                        <i class="fa-solid fa-plus"></i> New
+                    </button>
+                </div>
+                <div class="sidebar-content">
+                    <ul class="sessions-list" id="sessions-list">
+                        <!-- Populated dynamically -->
+                    </ul>
+                </div>
+            </section>
+
+            <!-- Middle Panel: Chat and Data Upload -->
             <section class="workspace-panel chat-panel">
                 <!-- File Upload Area -->
                 <div class="upload-section">
@@ -125,6 +143,44 @@
             </section>
         </main>
     </div>
+
+    <!-- Auth Modal -->
+    <div id="auth-modal" class="auth-modal-overlay hidden">
+        <div class="auth-modal-card">
+            <div class="auth-modal-header">
+                <div class="auth-logo-wrapper">
+                    <i class="fa-solid fa-chart-pie auth-logo-icon"></i>
+                </div>
+                <h2 id="auth-title">Welcome Back</h2>
+                <p id="auth-subtitle">Log in to your account to recover your workspace.</p>
+            </div>
+            
+            <form id="auth-form" class="auth-form">
+                <div class="form-group">
+                    <label for="auth-email"><i class="fa-regular fa-envelope"></i> Email Address</label>
+                    <input type="email" id="auth-email" required placeholder="you@example.com" autocomplete="email" />
+                </div>
+                <div class="form-group">
+                    <label for="auth-password"><i class="fa-solid fa-lock"></i> Password</label>
+                    <input type="password" id="auth-password" required placeholder="••••••••" minlength="6" autocomplete="current-password" />
+                </div>
+                
+                <div class="auth-error-message hidden" id="auth-error">
+                    <i class="fa-solid fa-circle-exclamation"></i> <span id="auth-error-text">Invalid credentials</span>
+                </div>
+                
+                <button type="submit" id="auth-submit-btn" class="auth-btn">
+                    <span>Login</span> <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </form>
+            
+            <div class="auth-toggle-prompt">
+                <span id="auth-toggle-text">Don't have an account?</span>
+                <button type="button" id="auth-toggle-btn" class="auth-text-btn">Create account</button>
+            </div>
+        </div>
+    </div>
+
     <script src="/static/app.js"></script>
 </body>
 </html>

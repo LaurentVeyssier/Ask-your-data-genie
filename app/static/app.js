@@ -3,17 +3,201 @@ let sessionId = "";
 let selectedFile = null;
 let isGenerating = false;
 let currentChartData = null;
+let jwtToken = localStorage.getItem("token") || "";
+let currentUserEmail = "";
+let isLoginMode = true;
 
 // Initialize
-document.addEventListener("DOMContentLoaded", () => {
-    generateNewSession();
+document.addEventListener("DOMContentLoaded", async () => {
     setupEventListeners();
+    await checkAuth();
 });
 
-// Generate Session ID
-function generateNewSession() {
-    sessionId = "session_" + Math.random().toString(36).substring(2, 15);
+// Get Authorization headers
+function getHeaders() {
+    return {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + jwtToken
+    };
+}
+
+// Check Authentication status
+async function checkAuth() {
+    if (!jwtToken) {
+        showAuthModal();
+        return;
+    }
+
+    try {
+        const response = await fetch("/api/auth/me", {
+            headers: getHeaders()
+        });
+
+        if (!response.ok) {
+            throw new Error("Session expired");
+        }
+
+        const data = await response.json();
+        currentUserEmail = data.email;
+        document.getElementById("user-email-display").textContent = currentUserEmail;
+        
+        // Hide modal
+        document.getElementById("auth-modal").classList.add("hidden");
+        
+        // Load sessions
+        await loadSessionsList();
+    } catch (err) {
+        console.error("Auth check failed:", err);
+        logout();
+    }
+}
+
+// Show Authentication Modal
+function showAuthModal() {
+    const modal = document.getElementById("auth-modal");
+    modal.classList.remove("hidden");
+    updateAuthModalUI();
+}
+
+// Update Auth Modal titles/buttons based on mode
+function updateAuthModalUI() {
+    const title = document.getElementById("auth-title");
+    const subtitle = document.getElementById("auth-subtitle");
+    const submitBtn = document.getElementById("auth-submit-btn");
+    const togglePromptText = document.getElementById("auth-toggle-text");
+    const toggleBtn = document.getElementById("auth-toggle-btn");
+    const errorDiv = document.getElementById("auth-error");
+
+    errorDiv.classList.add("hidden");
+
+    if (isLoginMode) {
+        title.textContent = "Welcome Back";
+        subtitle.textContent = "Log in to your account to recover your workspace.";
+        submitBtn.querySelector("span").textContent = "Login";
+        togglePromptText.textContent = "Don't have an account?";
+        toggleBtn.textContent = "Create account";
+    } else {
+        title.textContent = "Create Account";
+        subtitle.textContent = "Sign up to start analyzing and storing your data.";
+        submitBtn.querySelector("span").textContent = "Register";
+        togglePromptText.textContent = "Already have an account?";
+        toggleBtn.textContent = "Log in";
+    }
+}
+
+// Log out user
+function logout() {
+    jwtToken = "";
+    currentUserEmail = "";
+    sessionId = "";
+    selectedFile = null;
+    localStorage.removeItem("token");
+
+    // Clear file inputs UI
+    document.getElementById("file-input").value = "";
+    document.getElementById("file-status").classList.add("hidden");
+    document.getElementById("dropzone").classList.remove("hidden");
+
+    document.getElementById("sessions-list").innerHTML = "";
+    document.getElementById("chat-history").innerHTML = "";
+    document.getElementById("session-id-display").textContent = "None";
+    document.getElementById("plotly-chart").innerHTML = "";
+    document.getElementById("plotly-chart").classList.add("hidden");
+    document.getElementById("viz-empty-state").classList.remove("hidden");
+    document.getElementById("export-chart-btn").classList.add("hidden");
+    document.getElementById("artifacts-log").classList.add("hidden");
+    document.getElementById("artifacts-list").innerHTML = "";
+    showAuthModal();
+}
+
+// Load and display session list
+async function loadSessionsList(selectId = null) {
+    try {
+        const response = await fetch("/api/sessions", {
+            headers: getHeaders()
+        });
+
+        if (!response.ok) throw new Error("Failed to load sessions");
+
+        const data = await response.json();
+        const listContainer = document.getElementById("sessions-list");
+        listContainer.innerHTML = "";
+
+        if (data.sessions.length === 0) {
+            // Generate a fresh session if none exist
+            generateNewSession();
+            return;
+        }
+
+        data.sessions.forEach(sess => {
+            const li = document.createElement("li");
+            li.className = "session-item";
+            if (sess.id === sessionId) {
+                li.classList.add("active");
+            }
+
+            const formattedTime = new Date(sess.last_update_time * 1000).toLocaleString();
+            
+            li.innerHTML = `
+                <div class="session-info">
+                    <span class="session-title" title="${sess.id}">${sess.id}</span>
+                    <span class="session-time">${formattedTime}</span>
+                </div>
+                <button class="session-delete-btn" title="Delete Session">
+                    <i class="fa-solid fa-trash-can"></i>
+                </button>
+            `;
+
+            // Select session on click
+            li.addEventListener("click", () => {
+                if (sess.id !== sessionId) {
+                    selectSession(sess.id);
+                }
+            });
+
+            // Delete session button listener
+            const deleteBtn = li.querySelector(".session-delete-btn");
+            deleteBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                if (confirm(`Delete session ${sess.id}? This will permanently remove its conversation history and generated charts.`)) {
+                    deleteSession(sess.id);
+                }
+            });
+
+            listContainer.appendChild(li);
+        });
+
+        // Set active session if not selected yet
+        if (!sessionId) {
+            if (selectId) {
+                selectSession(selectId);
+            } else {
+                selectSession(data.sessions[0].id);
+            }
+        }
+    } catch (err) {
+        console.error("Failed to load sessions list:", err);
+    }
+}
+
+// Select a session and render its history
+async function selectSession(id) {
+    sessionId = id;
     document.getElementById("session-id-display").textContent = sessionId;
+
+    // Highlight active session in list
+    const items = document.querySelectorAll(".session-item");
+    items.forEach(item => {
+        const title = item.querySelector(".session-title").textContent;
+        if (title === id) {
+            item.classList.add("active");
+        } else {
+            item.classList.remove("active");
+        }
+    });
+
+    // Clear main UI components
+    document.getElementById("chat-history").innerHTML = "";
     document.getElementById("plotly-chart").innerHTML = "";
     document.getElementById("plotly-chart").classList.add("hidden");
     document.getElementById("viz-empty-state").classList.remove("hidden");
@@ -21,6 +205,158 @@ function generateNewSession() {
     document.getElementById("artifacts-log").classList.add("hidden");
     document.getElementById("artifacts-list").innerHTML = "";
     currentChartData = null;
+
+    try {
+        const response = await fetch(`/api/sessions/${id}`, {
+            headers: getHeaders()
+        });
+
+        if (!response.ok) throw new Error("Failed to load session details");
+
+        const data = await response.json();
+        
+        // Populate chat log from history turns
+        if (data.history && data.history.length > 0) {
+            data.history.forEach(turn => {
+                if (turn.role === "user") {
+                    appendUserMessage(turn.text, turn.file);
+                } else if (turn.role === "assistant") {
+                    const card = appendAssistantMessagePlaceholder();
+                    const contentTextElement = card.querySelector(".message-text-content");
+                    
+                    // Render response text
+                    if (turn.text) {
+                        contentTextElement.innerHTML = formatMarkdown(turn.text);
+                    }
+                    
+                    // Render code block accordion
+                    if (turn.code) {
+                        const accordion = createCodeAccordion(card);
+                        accordion.querySelector("pre").textContent = turn.code;
+                        accordion.classList.remove("hidden");
+                        
+                        if (turn.code_output) {
+                            const outputDiv = document.createElement("div");
+                            outputDiv.className = "code-output";
+                            if (turn.code_outcome === "OUTCOME_FAILED") {
+                                outputDiv.classList.add("error");
+                            }
+                            outputDiv.textContent = turn.code_output;
+                            accordion.querySelector(".code-block-wrapper").appendChild(outputDiv);
+                        }
+                    }
+                    
+                    // Remove typing dot
+                    card.querySelector(".typing-indicator").remove();
+                    
+                    // Append artifacts and render plot if generated
+                    if (turn.artifacts && turn.artifacts.length > 0) {
+                        turn.artifacts.forEach(filename => {
+                            appendArtifactToList(filename);
+                            if (filename === "plotly_chart.json") {
+                                fetchAndRenderChart(id, filename);
+                            }
+                        });
+                    }
+                }
+            });
+        } else {
+            // Default greeting for empty session
+            document.getElementById("chat-history").innerHTML = `
+                <div class="message system-message">
+                    <div class="message-avatar"><i class="fa-solid fa-robot"></i></div>
+                    <div class="message-content">
+                        <p>Hello! I am your AI Data Analyst. Upload a CSV file and ask me to analyze it, compute statistics, or generate charts using natural language.</p>
+                    </div>
+                </div>
+            `;
+        }
+    } catch (err) {
+        console.error("Error recovering session:", err);
+    }
+}
+
+// Delete a session
+async function deleteSession(id) {
+    try {
+        const response = await fetch(`/api/sessions/${id}`, {
+            method: "DELETE",
+            headers: getHeaders()
+        });
+
+        if (!response.ok) throw new Error("Failed to delete session");
+
+        if (sessionId === id) {
+            sessionId = "";
+        }
+        await loadSessionsList();
+    } catch (err) {
+        console.error("Error deleting session:", err);
+    }
+}
+
+// Generate New Session ID locally and save to Firestore
+function generateNewSession() {
+    sessionId = "session_" + Math.random().toString(36).substring(2, 15);
+    document.getElementById("session-id-display").textContent = sessionId;
+    
+    // Clear visualizations/artifacts
+    document.getElementById("plotly-chart").innerHTML = "";
+    document.getElementById("plotly-chart").classList.add("hidden");
+    document.getElementById("viz-empty-state").classList.remove("hidden");
+    document.getElementById("export-chart-btn").classList.add("hidden");
+    document.getElementById("artifacts-log").classList.add("hidden");
+    document.getElementById("artifacts-list").innerHTML = "";
+    currentChartData = null;
+
+    // Reset Chat Log DOM
+    const history = document.getElementById("chat-history");
+    history.innerHTML = `
+        <div class="message system-message">
+            <div class="message-avatar"><i class="fa-solid fa-robot"></i></div>
+            <div class="message-content">
+                <p>Hello! I am your AI Data Analyst. Upload a CSV file and ask me to analyze it, compute statistics, or generate charts using natural language.</p>
+            </div>
+        </div>
+    `;
+
+    // Add session to sidebar
+    const listContainer = document.getElementById("sessions-list");
+    const li = document.createElement("li");
+    li.className = "session-item active";
+    
+    const formattedTime = new Date().toLocaleString();
+    li.innerHTML = `
+        <div class="session-info">
+            <span class="session-title" title="${sessionId}">${sessionId}</span>
+            <span class="session-time">${formattedTime}</span>
+        </div>
+        <button class="session-delete-btn" title="Delete Session">
+            <i class="fa-solid fa-trash-can"></i>
+        </button>
+    `;
+    
+    li.addEventListener("click", () => {
+        selectSession(sessionId);
+    });
+    
+    li.querySelector(".session-delete-btn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (confirm(`Delete session ${sessionId}? This will permanently remove its conversation history and generated charts.`)) {
+            deleteSession(sessionId);
+        }
+    });
+
+    listContainer.insertBefore(li, listContainer.firstChild);
+
+    // Reset files input state
+    selectedFile = null;
+    document.getElementById("file-input").value = "";
+    document.getElementById("file-status").classList.add("hidden");
+    document.getElementById("dropzone").classList.remove("hidden");
+    document.getElementById("chat-input").value = "";
+    document.getElementById("chat-input").style.height = "auto";
+    toggleSendButton();
 }
 
 // Setup Event Listeners
@@ -30,8 +366,60 @@ function setupEventListeners() {
     const fileInput = document.getElementById("file-input");
     const dropzone = document.getElementById("dropzone");
     const removeFileBtn = document.getElementById("remove-file-btn");
-    const newChatBtn = document.getElementById("new-chat-btn");
+    const newSessionBtn = document.getElementById("new-session-sidebar-btn");
     const exportBtn = document.getElementById("export-chart-btn");
+    const logoutBtn = document.getElementById("logout-btn");
+    const authForm = document.getElementById("auth-form");
+    const authToggleBtn = document.getElementById("auth-toggle-btn");
+
+    // Auth toggle button (login vs register)
+    authToggleBtn.addEventListener("click", () => {
+        isLoginMode = !isLoginMode;
+        updateAuthModalUI();
+    });
+
+    // Auth submit handler
+    authForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const email = document.getElementById("auth-email").value.trim();
+        const password = document.getElementById("auth-password").value;
+        const errorDiv = document.getElementById("auth-error");
+        const errorText = document.getElementById("auth-error-text");
+
+        errorDiv.classList.add("hidden");
+
+        const endpoint = isLoginMode ? "/api/auth/login" : "/api/auth/register";
+
+        try {
+            const response = await fetch(endpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email, password })
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.detail || "Authentication failed");
+            }
+
+            // Save credentials
+            jwtToken = data.token;
+            localStorage.setItem("token", jwtToken);
+            
+            // Clear fields
+            document.getElementById("auth-email").value = "";
+            document.getElementById("auth-password").value = "";
+
+            await checkAuth();
+        } catch (err) {
+            console.error("Auth error:", err);
+            errorText.textContent = err.message;
+            errorDiv.classList.remove("hidden");
+        }
+    });
+
+    // Logout
+    logoutBtn.addEventListener("click", logout);
 
     // Text Input Auto-resize & Keybinds
     chatInput.addEventListener("input", () => {
@@ -79,28 +467,10 @@ function setupEventListeners() {
         toggleSendButton();
     });
 
-    // Reset Chat
-    newChatBtn.addEventListener("click", () => {
-        if (confirm("Are you sure you want to reset the session? All history and charts will be cleared.")) {
+    // New Session Sidebar button
+    newSessionBtn.addEventListener("click", () => {
+        if (confirm("Start a new session?")) {
             generateNewSession();
-            // Clear chat log
-            const history = document.getElementById("chat-history");
-            history.innerHTML = `
-                <div class="message system-message">
-                    <div class="message-avatar"><i class="fa-solid fa-robot"></i></div>
-                    <div class="message-content">
-                        <p>Hello! I am your AI Data Analyst. Upload a CSV file and ask me to analyze it, compute statistics, or generate charts using natural language.</p>
-                    </div>
-                </div>
-            `;
-            // Clear files
-            selectedFile = null;
-            fileInput.value = "";
-            document.getElementById("file-status").classList.add("hidden");
-            document.getElementById("dropzone").classList.remove("hidden");
-            chatInput.value = "";
-            chatInput.style.height = "auto";
-            toggleSendButton();
         }
     });
 
@@ -198,20 +568,19 @@ async function sendMessage() {
     isGenerating = true;
     toggleSendButton();
 
-    // 1. Append User Message to Chat Log
+    // Append User Message to Chat Log
     appendUserMessage(messageText, selectedFile ? selectedFile.name : null);
 
     // Clear input box
     chatInput.value = "";
     chatInput.style.height = "auto";
 
-    // 2. Append Assistant message card for streaming
+    // Append Assistant message card for streaming
     const assistantCard = appendAssistantMessagePlaceholder();
     const contentTextElement = assistantCard.querySelector(".message-text-content");
     const statusDot = assistantCard.querySelector(".typing-indicator");
 
     try {
-        const runtimeMode = document.getElementById("runtime-mode").value;
         const payload = {
             message: messageText,
             sessionId: sessionId,
@@ -225,9 +594,7 @@ async function sendMessage() {
         
         const response = await fetch("/api/chat", {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
+            headers: getHeaders(),
             body: JSON.stringify(payload)
         });
 
@@ -244,7 +611,6 @@ async function sendMessage() {
         let codeAccumulator = "";
         let codeOutputAccumulator = "";
         let currentAccordion = null;
-        let isCodeOpen = false;
 
         while (true) {
             const { value, done } = await reader.read();
@@ -278,7 +644,6 @@ async function sendMessage() {
                                     const code = part.executableCode.code;
                                     if (code) {
                                         if (!currentAccordion) {
-                                            // Reset code accumulators when creating a new accordion block
                                             codeAccumulator = "";
                                             codeOutputAccumulator = "";
                                             currentAccordion = createCodeAccordion(assistantCard);
@@ -320,7 +685,6 @@ async function sendMessage() {
                                 // 3. Handle standard text parts
                                 if (part.text) {
                                     textAccumulator += part.text;
-                                    // Parse markdown bullet points and bolding very simply
                                     contentTextElement.innerHTML = formatMarkdown(textAccumulator);
                                 }
                             }
@@ -340,7 +704,6 @@ async function sendMessage() {
                         }
                     } catch (e) {
                         console.error("Error parsing event line", e);
-                        // Re-throw if it is an actual generation/agent error to display it to the user
                         if (e.message.includes("Agent execution error") || e.message.includes("Error:")) {
                             throw e;
                         }
@@ -355,6 +718,9 @@ async function sendMessage() {
         statusDot.remove();
         isGenerating = false;
         toggleSendButton();
+        
+        // Refresh sidebar sessions to reflect last update time changes
+        await loadSessionsList();
     }
 }
 
@@ -424,7 +790,6 @@ function appendAssistantMessagePlaceholder() {
 // Markdown Formatter using Marked.js
 function formatMarkdown(text) {
     if (window.marked && window.marked.parse) {
-        // marked.parse handles standard markdown formatting
         return window.marked.parse(text);
     }
     
@@ -466,7 +831,7 @@ function appendArtifactToList(filename) {
     logSection.classList.remove("hidden");
 
     // Check if filename already in list
-    const existing = Array.from(list.children).find(li => li.textContent === filename);
+    const existing = Array.from(list.children).find(li => li.textContent.trim() === filename);
     if (!existing) {
         const li = document.createElement("li");
         li.innerHTML = `<i class="fa-regular fa-file"></i> ${filename}`;
@@ -474,18 +839,47 @@ function appendArtifactToList(filename) {
             if (filename === "plotly_chart.json") {
                 fetchAndRenderChart(sessionId, filename);
             } else {
-                // Let user open other artifacts
-                window.open(`/api/artifacts/${sessionId}/${filename}`, "_blank");
+                // Open other artifacts with auth token appended as query or fetched
+                const url = `/api/artifacts/${sessionId}/${filename}`;
+                // Since window.open doesn't let us easily send Bearer header directly,
+                // we can either download the artifact via fetch and create an object URL,
+                // or redirect/open in new tab.
+                // Fetching is much better as it keeps it secure and authenticates correctly!
+                fetchArtifactAndDownload(url, filename);
             }
         });
         list.appendChild(li);
     }
 }
 
+// Securely fetch artifact and trigger browser download
+async function fetchArtifactAndDownload(url, filename) {
+    try {
+        const response = await fetch(url, {
+            headers: getHeaders()
+        });
+        if (!response.ok) throw new Error("Failed to download artifact");
+        
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = objectUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(objectUrl);
+    } catch (err) {
+        console.error("Artifact download failed:", err);
+    }
+}
+
 // Fetch Plotly JSON and render it in dashboard
 async function fetchAndRenderChart(sessId, filename) {
     try {
-        const response = await fetch(`/api/artifacts/${sessId}/${filename}`);
+        const response = await fetch(`/api/artifacts/${sessId}/${filename}`, {
+            headers: getHeaders()
+        });
         if (!response.ok) throw new Error("Failed to load chart artifact");
 
         const chartJson = await response.json();

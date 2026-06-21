@@ -20,12 +20,17 @@ import logging
 import os
 from typing import Dict, Any, Optional
 
+import dotenv
+# Load .env variables, forcing override
+dotenv.load_dotenv(override=True)
+
 import google.auth
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Response, Depends, Security, BackgroundTasks
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from google.adk.artifacts import InMemoryArtifactService
 from google.adk.cli.fast_api import get_fast_api_app
 from google.adk.runners import Runner
@@ -37,6 +42,13 @@ from pydantic import BaseModel
 from app.agent import root_agent
 from app.app_utils.telemetry import setup_telemetry
 from app.app_utils.typing import Feedback
+from app.app_utils.auth_service import (
+    UserStore,
+    hash_password,
+    verify_password,
+    create_jwt_token,
+    verify_jwt_token,
+)
 
 # Setup telemetry
 setup_telemetry()
@@ -96,9 +108,78 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Persistent In-Memory Services for the /api/chat route
-session_service = InMemorySessionService()
-artifact_service = InMemoryArtifactService()
+# Determine environment
+IS_DEPLOYED = bool(os.getenv("K_SERVICE") or os.getenv("ENVIRONMENT") == "production")
+
+# Initialize database / user store
+user_store = UserStore(is_deployed=IS_DEPLOYED)
+
+# Initialize Session and Artifact services based on environment
+if IS_DEPLOYED:
+    from google.cloud.firestore import AsyncClient
+    from app.app_utils.firestore_session import FirestoreSessionService
+    from google.adk.artifacts import GcsArtifactService
+
+    firestore_client = AsyncClient()
+    session_service = FirestoreSessionService(
+        firestore_client=firestore_client,
+        bucket_name=logs_bucket_name,
+    )
+    if logs_bucket_name:
+        artifact_service = GcsArtifactService(bucket_name=logs_bucket_name)
+    else:
+        artifact_service = InMemoryArtifactService()
+else:
+    session_service = InMemorySessionService()
+    artifact_service = InMemoryArtifactService()
+
+
+# Security Bearer scheme
+security_scheme = HTTPBearer()
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Security(security_scheme),
+) -> str:
+    """FastAPI dependency to secure routes and extract authenticated user ID.
+
+    Args:
+        credentials: The HTTP Authorization credentials.
+
+    Returns:
+        The authenticated user email.
+
+    Raises:
+        HTTPException: If token is missing or invalid.
+    """
+    token = credentials.credentials
+    email = verify_jwt_token(token)
+    if not email:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return email
+
+
+async def run_session_cleanup() -> None:
+    """Asynchronously runs the 7-day session and artifact cleanup in production."""
+    if IS_DEPLOYED:
+        try:
+            # FirestoreSessionService clean_old_sessions
+            if hasattr(session_service, "clean_old_sessions"):
+                cleaned = await session_service.clean_old_sessions(max_age_days=7)
+                if cleaned > 0:
+                    logger.info("Automatically cleaned up %d expired sessions.", cleaned)
+        except Exception as e:
+            logger.error("Failed to run automatic session cleanup: %s", e)
+
+
+class UserCredentials(BaseModel):
+    """Pydantic model representing user login/register credentials."""
+    email: str
+    password: str
 
 
 class FilePayload(BaseModel):
@@ -115,12 +196,192 @@ class ChatRequest(BaseModel):
     file: Optional[FilePayload] = None
 
 
+@app.post("/api/auth/register")
+async def register(
+    creds: UserCredentials,
+    background_tasks: BackgroundTasks,
+) -> dict[str, str]:
+    """Registers a new user and schedules automatic cleanup."""
+    if not creds.email or not creds.password:
+        raise HTTPException(status_code=400, detail="Email and password are required")
+    if len(creds.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    existing = await user_store.get_user(creds.email)
+    if existing:
+        raise HTTPException(status_code=400, detail="User already exists")
+
+    pwd_hash = hash_password(creds.password)
+    await user_store.create_user(creds.email, pwd_hash)
+
+    # Trigger automatic cleanup in background
+    background_tasks.add_task(run_session_cleanup)
+
+    token = create_jwt_token(creds.email)
+    return {"status": "success", "token": token, "email": creds.email}
+
+
+@app.post("/api/auth/login")
+async def login(
+    creds: UserCredentials,
+    background_tasks: BackgroundTasks,
+) -> dict[str, str]:
+    """Authenticates a user, returns JWT and triggers automatic cleanup."""
+    if not creds.email or not creds.password:
+        raise HTTPException(status_code=400, detail="Email and password are required")
+
+    user = await user_store.get_user(creds.email)
+    if not user or not verify_password(creds.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Incorrect email or password")
+
+    # Trigger automatic cleanup in background
+    background_tasks.add_task(run_session_cleanup)
+
+    token = create_jwt_token(creds.email)
+    return {"status": "success", "token": token, "email": creds.email}
+
+
+@app.get("/api/auth/me")
+async def get_me(current_user: str = Depends(get_current_user)) -> dict[str, str]:
+    """Validates token and returns current user details."""
+    return {"email": current_user}
+
+
+@app.get("/api/sessions")
+async def list_user_sessions(
+    current_user: str = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Lists all the sessions belonging to the authenticated user."""
+    try:
+        response = await session_service.list_sessions(
+            app_name="app", user_id=current_user
+        )
+        sessions_list = []
+        for s in response.sessions:
+            sessions_list.append({
+                "id": s.id,
+                "app_name": s.app_name,
+                "user_id": s.user_id,
+                "last_update_time": s.last_update_time,
+                "state": s.state,
+            })
+        return {"sessions": sessions_list}
+    except Exception as e:
+        logger.error("Error listing sessions: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def format_session_history(session: Any) -> list[dict[str, Any]]:
+    """Translates ADK session history events into a clean history turns format.
+
+    Args:
+        session: The Session instance containing the events.
+
+    Returns:
+        A list of turn dictionaries (role, text, file, code, etc.).
+    """
+    turns = []
+    current_turn = None
+
+    for event in session.events:
+        if event.content:
+            role = event.content.role
+            if role == "user":
+                text = ""
+                file_name = None
+                for part in event.content.parts:
+                    if part.text:
+                        text += part.text
+                    elif part.inline_data:
+                        file_name = part.inline_data.display_name or "uploaded_file.csv"
+                current_turn = {
+                    "role": "user",
+                    "text": text,
+                    "file": file_name,
+                }
+                turns.append(current_turn)
+                current_turn = None
+            elif role in ("model", "assistant"):
+                if current_turn is None or current_turn["role"] != "assistant":
+                    current_turn = {
+                        "role": "assistant",
+                        "text": "",
+                        "code": "",
+                        "code_output": "",
+                        "code_outcome": None,
+                        "artifacts": [],
+                    }
+                    turns.append(current_turn)
+
+                for part in event.content.parts:
+                    if part.text:
+                        current_turn["text"] += part.text
+                    elif part.executable_code:
+                        current_turn["code"] += part.executable_code.code
+                    elif part.code_execution_result:
+                        current_turn["code_output"] += part.code_execution_result.output
+                        current_turn["code_outcome"] = part.code_execution_result.outcome
+
+        if event.actions and event.actions.artifact_delta:
+            if current_turn and current_turn["role"] == "assistant":
+                for filename in event.actions.artifact_delta.keys():
+                    if filename not in current_turn["artifacts"]:
+                        current_turn["artifacts"].append(filename)
+
+    return turns
+
+
+@app.get("/api/sessions/{session_id}")
+async def get_session_history(
+    session_id: str,
+    current_user: str = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Retrieves session details and builds conversation turns for recovery."""
+    session = await session_service.get_session(
+        app_name="app", user_id=current_user, session_id=session_id
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    history = format_session_history(session)
+    return {
+        "id": session.id,
+        "app_name": session.app_name,
+        "user_id": session.user_id,
+        "last_update_time": session.last_update_time,
+        "state": session.state,
+        "history": history,
+    }
+
+
+@app.delete("/api/sessions/{session_id}")
+async def delete_user_session(
+    session_id: str,
+    current_user: str = Depends(get_current_user),
+) -> dict[str, str]:
+    """Deletes a session and its artifacts."""
+    session = await session_service.get_session(
+        app_name="app", user_id=current_user, session_id=session_id
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    await session_service.delete_session(
+        app_name="app", user_id=current_user, session_id=session_id
+    )
+    return {"status": "success"}
+
+
 @app.post("/api/chat")
-async def chat_endpoint(request: ChatRequest) -> StreamingResponse:
+async def chat_endpoint(
+    request: ChatRequest,
+    current_user: str = Depends(get_current_user),
+) -> StreamingResponse:
     """Streams agent execution events for the user question and optional CSV file.
 
     Args:
         request: The ChatRequest data containing the prompt, session, and file.
+        current_user: The authenticated user's ID.
 
     Returns:
         A StreamingResponse emitting server-sent events.
@@ -130,7 +391,7 @@ async def chat_endpoint(request: ChatRequest) -> StreamingResponse:
     # Create session if it doesn't exist
     try:
         await session_service.create_session(
-            app_name="app", user_id="user", session_id=session_id
+            app_name="app", user_id=current_user, session_id=session_id
         )
     except Exception:
         # Ignore if session already exists
@@ -166,7 +427,7 @@ async def chat_endpoint(request: ChatRequest) -> StreamingResponse:
     async def event_generator():
         try:
             async for event in runner.run_async(
-                user_id="user",
+                user_id=current_user,
                 session_id=session_id,
                 new_message=new_message,
             ):
@@ -182,12 +443,17 @@ async def chat_endpoint(request: ChatRequest) -> StreamingResponse:
 
 
 @app.get("/api/artifacts/{session_id}/{filename}")
-async def get_artifact(session_id: str, filename: str) -> Response:
+async def get_artifact(
+    session_id: str,
+    filename: str,
+    current_user: str = Depends(get_current_user),
+) -> Response:
     """Retrieves a generated artifact file by filename.
 
     Args:
         session_id: The ID of the current session.
         filename: The name of the artifact file to load.
+        current_user: The authenticated user's ID.
 
     Returns:
         A Response containing the raw file data.
@@ -195,7 +461,7 @@ async def get_artifact(session_id: str, filename: str) -> Response:
     try:
         artifact = await artifact_service.load_artifact(
             app_name="app",
-            user_id="user",
+            user_id=current_user,
             session_id=session_id,
             filename=filename,
         )
