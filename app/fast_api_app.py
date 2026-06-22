@@ -112,7 +112,10 @@ app.add_middleware(
 IS_DEPLOYED = bool(os.getenv("K_SERVICE") or os.getenv("ENVIRONMENT") == "production")
 
 # Initialize database / user store
-user_store = UserStore(is_deployed=IS_DEPLOYED)
+if os.getenv("INTEGRATION_TEST") == "TRUE":
+    user_store = UserStore(is_deployed=IS_DEPLOYED, db_path="test_users.db")
+else:
+    user_store = UserStore(is_deployed=IS_DEPLOYED)
 
 # Initialize Session and Artifact services based on environment
 if IS_DEPLOYED:
@@ -163,6 +166,29 @@ async def get_current_user(
     return email
 
 
+async def get_current_admin(
+    current_user: str = Depends(get_current_user),
+) -> str:
+    """Security guard to check if the authenticated user has Admin permissions.
+
+    Args:
+        current_user: The authenticated user's ID/email.
+
+    Returns:
+        The authenticated user's ID/email if they are an admin.
+
+    Raises:
+        HTTPException: 403 Forbidden if not an admin.
+    """
+    user = await user_store.get_user(current_user)
+    if not user or not user.get("is_admin", False):
+        raise HTTPException(
+            status_code=403,
+            detail="Administrative privileges required to access this resource",
+        )
+    return current_user
+
+
 async def run_session_cleanup() -> None:
     """Asynchronously runs the 7-day session and artifact cleanup in production."""
     if IS_DEPLOYED:
@@ -200,7 +226,7 @@ class ChatRequest(BaseModel):
 async def register(
     creds: UserCredentials,
     background_tasks: BackgroundTasks,
-) -> dict[str, str]:
+) -> dict[str, Any]:
     """Registers a new user and schedules automatic cleanup."""
     if not creds.email or not creds.password:
         raise HTTPException(status_code=400, detail="Email and password are required")
@@ -212,20 +238,25 @@ async def register(
         raise HTTPException(status_code=400, detail="User already exists")
 
     pwd_hash = hash_password(creds.password)
-    await user_store.create_user(creds.email, pwd_hash)
+    user = await user_store.create_user(creds.email, pwd_hash)
 
     # Trigger automatic cleanup in background
     background_tasks.add_task(run_session_cleanup)
 
     token = create_jwt_token(creds.email)
-    return {"status": "success", "token": token, "email": creds.email}
+    return {
+        "status": "success",
+        "token": token,
+        "email": creds.email,
+        "is_admin": user.get("is_admin", False),
+    }
 
 
 @app.post("/api/auth/login")
 async def login(
     creds: UserCredentials,
     background_tasks: BackgroundTasks,
-) -> dict[str, str]:
+) -> dict[str, Any]:
     """Authenticates a user, returns JWT and triggers automatic cleanup."""
     if not creds.email or not creds.password:
         raise HTTPException(status_code=400, detail="Email and password are required")
@@ -238,13 +269,20 @@ async def login(
     background_tasks.add_task(run_session_cleanup)
 
     token = create_jwt_token(creds.email)
-    return {"status": "success", "token": token, "email": creds.email}
+    return {
+        "status": "success",
+        "token": token,
+        "email": creds.email,
+        "is_admin": user.get("is_admin", False),
+    }
 
 
 @app.get("/api/auth/me")
-async def get_me(current_user: str = Depends(get_current_user)) -> dict[str, str]:
+async def get_me(current_user: str = Depends(get_current_user)) -> dict[str, Any]:
     """Validates token and returns current user details."""
-    return {"email": current_user}
+    user = await user_store.get_user(current_user)
+    is_admin = user.get("is_admin", False) if user else False
+    return {"email": current_user, "is_admin": is_admin}
 
 
 @app.get("/api/sessions")
@@ -371,6 +409,119 @@ async def delete_user_session(
     )
     return {"status": "success"}
 
+
+# ==============================================================================
+# ADMIN ENDPOINTS
+# ==============================================================================
+
+@app.get("/api/admin/users")
+async def admin_list_users(
+    current_admin: str = Depends(get_current_admin),
+) -> dict[str, Any]:
+    """Lists all registered users in the database (Admin only)."""
+    users = await user_store.list_users()
+    for u in users:
+        u["is_primary_admin"] = (u["email"] == user_store.admin_email)
+    return {"users": users}
+
+
+@app.post("/api/admin/users/{email}/toggle-admin")
+async def admin_toggle_role(
+    email: str,
+    current_admin: str = Depends(get_current_admin),
+) -> dict[str, Any]:
+    """Toggles administrative privileges for a user (Admin only)."""
+    try:
+        new_state = await user_store.toggle_admin(email)
+        return {"status": "success", "email": email, "is_admin": new_state}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/admin/sessions")
+async def admin_list_sessions(
+    current_admin: str = Depends(get_current_admin),
+) -> dict[str, Any]:
+    """Lists all sessions across all users in the system (Admin only)."""
+    try:
+        # Passing user_id=None gets sessions for all users
+        response = await session_service.list_sessions(
+            app_name="app", user_id=None
+        )
+        sessions_list = []
+        for s in response.sessions:
+            sessions_list.append({
+                "id": s.id,
+                "app_name": s.app_name,
+                "user_id": s.user_id,
+                "last_update_time": s.last_update_time,
+                "state": s.state,
+            })
+        return {"sessions": sessions_list}
+    except Exception as e:
+        logger.error("Error in admin list sessions: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/admin/sessions/{user_id}/{session_id}")
+async def admin_delete_session(
+    user_id: str,
+    session_id: str,
+    current_admin: str = Depends(get_current_admin),
+) -> dict[str, str]:
+    """Force deletes a user session and all its GCS/local artifacts (Admin only)."""
+    session = await session_service.get_session(
+        app_name="app", user_id=user_id, session_id=session_id
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    await session_service.delete_session(
+        app_name="app", user_id=user_id, session_id=session_id
+    )
+    return {"status": "success"}
+
+
+@app.get("/api/admin/stats")
+async def admin_get_stats(
+    current_admin: str = Depends(get_current_admin),
+) -> dict[str, Any]:
+    """Aggregates system statistics for the Admin dashboard (Admin only)."""
+    try:
+        users = await user_store.list_users()
+        sessions_response = await session_service.list_sessions(
+            app_name="app", user_id=None
+        )
+
+        total_users = len(users)
+        total_sessions = len(sessions_response.sessions)
+        admin_count = sum(1 for u in users if u.get("is_admin", False))
+
+        return {
+            "total_users": total_users,
+            "total_sessions": total_sessions,
+            "admin_users": admin_count,
+            "db_type": "Firestore" if IS_DEPLOYED else "SQLite",
+            "environment": "production" if IS_DEPLOYED else "local"
+        }
+    except Exception as e:
+        logger.error("Error aggregating admin stats: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/admin/cleanup")
+async def admin_trigger_cleanup(
+    background_tasks: BackgroundTasks,
+    current_admin: str = Depends(get_current_admin),
+) -> dict[str, str]:
+    """Manually triggers GCS and Firestore cleanup in the background (Admin only)."""
+    background_tasks.add_task(run_session_cleanup)
+    return {"status": "success", "message": "Cleanup job triggered in background"}
+
+
+# ==============================================================================
+# MAIN & UTILITY ENDPOINTS
+# ==============================================================================
 
 @app.post("/api/chat")
 async def chat_endpoint(

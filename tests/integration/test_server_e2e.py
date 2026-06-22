@@ -22,6 +22,9 @@ import time
 from collections.abc import Iterator
 from typing import Any
 
+import dotenv
+dotenv.load_dotenv()
+
 import pytest
 import requests
 from requests.exceptions import RequestException
@@ -96,6 +99,13 @@ def wait_for_server(timeout: int = 90, interval: int = 1) -> bool:
 @pytest.fixture(scope="session")
 def server_fixture(request: Any) -> Iterator[subprocess.Popen[str]]:
     """Pytest fixture to start and stop the server for testing."""
+    # Clean up test database if it exists
+    if os.path.exists("test_users.db"):
+        try:
+            os.remove("test_users.db")
+        except Exception:
+            pass
+
     logger.info("Starting server process")
     server_process = start_server()
     if not wait_for_server():
@@ -107,6 +117,12 @@ def server_fixture(request: Any) -> Iterator[subprocess.Popen[str]]:
         server_process.terminate()
         server_process.wait()
         logger.info("Server process stopped")
+        # Clean up test database after stop
+        if os.path.exists("test_users.db"):
+            try:
+                os.remove("test_users.db")
+            except Exception:
+                pass
 
     request.addfinalizer(stop_server)
     yield server_process
@@ -206,3 +222,100 @@ def test_collect_feedback(server_fixture: subprocess.Popen[str]) -> None:
         FEEDBACK_URL, json=feedback_data, headers=HEADERS, timeout=10
     )
     assert response.status_code == 200
+
+
+def test_admin_flow(server_fixture: subprocess.Popen[str]) -> None:
+    """Test the admin RBAC permissions, listing users/stats, role toggling, and cleanup."""
+    import uuid
+    unique_suffix = uuid.uuid4().hex[:6]
+    reg_email = f"user_{unique_suffix}@example.com"
+    admin_email = os.getenv("ADMIN_EMAIL", "admin@example.com").strip().lower()
+    password = "password123"
+
+    # 1. Register regular user
+    reg_res = requests.post(
+        f"{BASE_URL}/api/auth/register",
+        json={"email": reg_email, "password": password},
+        headers=HEADERS,
+        timeout=10
+    )
+    assert reg_res.status_code == 200
+    reg_token = reg_res.json()["token"]
+    assert reg_res.json()["is_admin"] is False
+
+    # 2. Register/Login admin user
+    admin_res = requests.post(
+        f"{BASE_URL}/api/auth/register",
+        json={"email": admin_email, "password": password},
+        headers=HEADERS,
+        timeout=10
+    )
+    if admin_res.status_code == 400:  # Already exists
+        admin_res = requests.post(
+            f"{BASE_URL}/api/auth/login",
+            json={"email": admin_email, "password": password},
+            headers=HEADERS,
+            timeout=10
+        )
+    assert admin_res.status_code == 200
+    admin_token = admin_res.json()["token"]
+    assert admin_res.json()["is_admin"] is True
+
+    # 3. Regular user tries to access admin stats -> 403
+    reg_headers = {"Authorization": f"Bearer {reg_token}", "Content-Type": "application/json"}
+    stats_res = requests.get(f"{BASE_URL}/api/admin/stats", headers=reg_headers, timeout=10)
+    assert stats_res.status_code == 403
+
+    # 4. Admin accesses stats -> 200
+    admin_headers = {"Authorization": f"Bearer {admin_token}", "Content-Type": "application/json"}
+    stats_res = requests.get(f"{BASE_URL}/api/admin/stats", headers=admin_headers, timeout=10)
+    assert stats_res.status_code == 200
+    stats_data = stats_res.json()
+    assert stats_data["total_users"] >= 2
+    assert stats_data["admin_users"] >= 1
+
+    # 5. Admin lists users
+    users_res = requests.get(f"{BASE_URL}/api/admin/users", headers=admin_headers, timeout=10)
+    assert users_res.status_code == 200
+    users_list = users_res.json()["users"]
+    emails = [u["email"] for u in users_list]
+    assert reg_email in emails
+    assert admin_email in emails
+
+    # 6. Admin promotes regular user
+    promote_res = requests.post(
+        f"{BASE_URL}/api/admin/users/{reg_email}/toggle-admin",
+        headers=admin_headers,
+        timeout=10
+    )
+    assert promote_res.status_code == 200
+    assert promote_res.json()["is_admin"] is True
+
+    # 7. Check that the promoted user is now admin
+    me_res = requests.get(f"{BASE_URL}/api/auth/me", headers=reg_headers, timeout=10)
+    assert me_res.status_code == 200
+    assert me_res.json()["is_admin"] is True
+
+    # 8. Attempt to demote primary admin -> should still be True (ignored/disallowed)
+    demote_primary_res = requests.post(
+        f"{BASE_URL}/api/admin/users/{admin_email}/toggle-admin",
+        headers=reg_headers,
+        timeout=10
+    )
+    assert demote_primary_res.status_code == 200
+    assert demote_primary_res.json()["is_admin"] is True
+
+    # 9. Original admin demotes the promoted user back to regular user
+    demote_res = requests.post(
+        f"{BASE_URL}/api/admin/users/{reg_email}/toggle-admin",
+        headers=admin_headers,
+        timeout=10
+    )
+    assert demote_res.status_code == 200
+    assert demote_res.json()["is_admin"] is False
+
+    # 10. Admin triggers cleanup -> 200
+    cleanup_res = requests.post(f"{BASE_URL}/api/admin/cleanup", headers=admin_headers, timeout=10)
+    assert cleanup_res.status_code == 200
+    assert cleanup_res.json()["status"] == "success"
+

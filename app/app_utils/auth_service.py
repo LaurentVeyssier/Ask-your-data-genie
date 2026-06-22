@@ -107,6 +107,7 @@ class UserStore:
         self.is_deployed = is_deployed
         self.db_path = db_path
         self.collection_name = "users"
+        self.admin_email = os.getenv("ADMIN_EMAIL", "admin@example.com").strip().lower()
 
         if not self.is_deployed:
             self._init_sqlite()
@@ -114,7 +115,7 @@ class UserStore:
             self.firestore_client = AsyncClient()
 
     def _init_sqlite(self) -> None:
-        """Creates the sqlite users table if it does not exist."""
+        """Creates the sqlite users table and runs migration upgrades if needed."""
         conn = sqlite3.connect(self.db_path)
         try:
             cursor = conn.cursor()
@@ -126,6 +127,15 @@ class UserStore:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+
+            # Migration check: check if is_admin column exists
+            cursor.execute("PRAGMA table_info(users)")
+            columns = [col[1] for col in cursor.fetchall()]
+            if "is_admin" not in columns:
+                cursor.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0")
+
+            # Automatically promote default admin to admin status
+            cursor.execute("UPDATE users SET is_admin = 1 WHERE email = ?", (self.admin_email,))
             conn.commit()
         finally:
             conn.close()
@@ -144,17 +154,27 @@ class UserStore:
             doc_ref = self.firestore_client.collection(self.collection_name).document(email)
             doc = await doc_ref.get()
             if doc.exists:
-                return doc.to_dict()
+                doc_data = doc.to_dict() or {}
+                if email == self.admin_email and not doc_data.get("is_admin"):
+                    doc_data["is_admin"] = True
+                    await doc_ref.update({"is_admin": True})
+                return doc_data
             return None
         else:
             def _get():
                 conn = sqlite3.connect(self.db_path)
                 try:
                     cursor = conn.cursor()
-                    cursor.execute("SELECT id, email, password_hash FROM users WHERE email = ?", (email,))
+                    cursor.execute("SELECT id, email, password_hash, is_admin, created_at FROM users WHERE email = ?", (email,))
                     row = cursor.fetchone()
                     if row:
-                        return {"id": row[0], "email": row[1], "password_hash": row[2]}
+                        return {
+                            "id": row[0],
+                            "email": row[1],
+                            "password_hash": row[2],
+                            "is_admin": bool(row[3]),
+                            "created_at": row[4]
+                        }
                     return None
                 finally:
                     conn.close()
@@ -173,10 +193,12 @@ class UserStore:
         """
         email = email.strip().lower()
         user_id = email
+        is_admin = (email == self.admin_email)
         user_data = {
             "id": user_id,
             "email": email,
             "password_hash": password_hash,
+            "is_admin": is_admin,
             "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
         }
 
@@ -190,8 +212,8 @@ class UserStore:
                 try:
                     cursor = conn.cursor()
                     cursor.execute(
-                        "INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)",
-                        (user_id, email, password_hash)
+                        "INSERT INTO users (id, email, password_hash, is_admin) VALUES (?, ?, ?, ?)",
+                        (user_id, email, password_hash, 1 if is_admin else 0)
                     )
                     conn.commit()
                     return user_data
@@ -199,3 +221,81 @@ class UserStore:
                     conn.close()
             import asyncio
             return await asyncio.to_thread(_create)
+
+    async def list_users(self) -> list[Dict[str, Any]]:
+        """Lists all registered users.
+
+        Returns:
+            A list of user dictionaries.
+        """
+        if self.is_deployed:
+            users_ref = self.firestore_client.collection(self.collection_name)
+            docs = users_ref.stream()
+            users_list = []
+            async for doc in docs:
+                data = doc.to_dict() or {}
+                # Strip password hash before returning
+                data.pop("password_hash", None)
+                users_list.append(data)
+            # Sort by created_at
+            users_list.sort(key=lambda u: u.get("created_at", ""))
+            return users_list
+        else:
+            def _list():
+                conn = sqlite3.connect(self.db_path)
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT id, email, is_admin, created_at FROM users")
+                    rows = cursor.fetchall()
+                    users_list = []
+                    for row in rows:
+                        users_list.append({
+                            "id": row[0],
+                            "email": row[1],
+                            "is_admin": bool(row[2]),
+                            "created_at": row[3]
+                        })
+                    return users_list
+                finally:
+                    conn.close()
+            import asyncio
+            users = await asyncio.to_thread(_list)
+            users.sort(key=lambda u: u.get("created_at", ""))
+            return users
+
+    async def toggle_admin(self, email: str) -> bool:
+        """Toggles administrative privileges for a user.
+
+        Args:
+            email: The user's email.
+
+        Returns:
+            The new is_admin boolean state.
+        """
+        email = email.strip().lower()
+        if email == self.admin_email:
+            # The primary admin cannot be demoted
+            return True
+
+        user = await self.get_user(email)
+        if not user:
+            raise ValueError("User not found")
+
+        new_state = not user.get("is_admin", False)
+
+        if self.is_deployed:
+            doc_ref = self.firestore_client.collection(self.collection_name).document(email)
+            await doc_ref.update({"is_admin": new_state})
+            return new_state
+        else:
+            def _toggle():
+                conn = sqlite3.connect(self.db_path)
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute("UPDATE users SET is_admin = ? WHERE email = ?", (1 if new_state else 0, email))
+                    conn.commit()
+                    return new_state
+                finally:
+                    conn.close()
+            import asyncio
+            return await asyncio.to_thread(_toggle)

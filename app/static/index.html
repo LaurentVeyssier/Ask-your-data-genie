@@ -42,6 +42,9 @@
                 <div class="user-profile" id="user-profile-badge">
                     <i class="fa-solid fa-user-tag"></i> <span id="user-email-display">Loading...</span>
                 </div>
+                <button id="admin-panel-btn" class="header-btn hidden" title="Admin Control Panel" style="background: rgba(139, 92, 246, 0.15); border-color: rgba(139, 92, 246, 0.35); color: #a78bfa;">
+                    <i class="fa-solid fa-user-shield"></i> Admin Panel
+                </button>
                 <button id="logout-btn" class="header-btn secondary-btn" title="Logout">
                     <i class="fa-solid fa-right-from-bracket"></i> Logout
                 </button>
@@ -177,6 +180,106 @@
             <div class="auth-toggle-prompt">
                 <span id="auth-toggle-text">Don't have an account?</span>
                 <button type="button" id="auth-toggle-btn" class="auth-text-btn">Create account</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Control Panel Modal -->
+    <div id="admin-modal" class="auth-modal-overlay hidden">
+        <div class="auth-modal-card admin-modal-card">
+            <div class="admin-modal-header">
+                <div class="admin-modal-title">
+                    <i class="fa-solid fa-user-shield admin-logo-icon"></i>
+                    <h2>Admin Control Panel</h2>
+                </div>
+                <button id="admin-close-btn" class="admin-close-btn" title="Close Panel">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- Tabs Navigation -->
+            <div class="admin-tabs">
+                <button class="admin-tab-btn active" data-tab="admin-tab-users">
+                    <i class="fa-solid fa-users"></i> Users
+                </button>
+                <button class="admin-tab-btn" data-tab="admin-tab-sessions">
+                    <i class="fa-solid fa-comments"></i> Sessions
+                </button>
+                <button class="admin-tab-btn" data-tab="admin-tab-system">
+                    <i class="fa-solid fa-gears"></i> Stats & System
+                </button>
+            </div>
+
+            <!-- Tab Content: Users -->
+            <div id="admin-tab-users" class="admin-tab-content active">
+                <div class="admin-table-container">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>User Email</th>
+                                <th>Role</th>
+                                <th>Registered</th>
+                                <th style="text-align: center;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-users-table-body">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Tab Content: Sessions -->
+            <div id="admin-tab-sessions" class="admin-tab-content">
+                <div class="admin-table-container">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Session ID</th>
+                                <th>User Email</th>
+                                <th>Last Active</th>
+                                <th style="text-align: center;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-sessions-table-body">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Tab Content: System -->
+            <div id="admin-tab-system" class="admin-tab-content">
+                <div class="admin-stats-grid">
+                    <div class="admin-stat-card">
+                        <span class="stat-label">Total Users</span>
+                        <span class="stat-value" id="admin-stat-users">-</span>
+                    </div>
+                    <div class="admin-stat-card">
+                        <span class="stat-label">Total Sessions</span>
+                        <span class="stat-value" id="admin-stat-sessions">-</span>
+                    </div>
+                    <div class="admin-stat-card">
+                        <span class="stat-label">Admin Users</span>
+                        <span class="stat-value" id="admin-stat-admins">-</span>
+                    </div>
+                </div>
+                <div class="admin-system-actions">
+                    <div class="system-meta-item">
+                        <span>Database Engine:</span>
+                        <strong id="admin-system-db-type">-</strong>
+                    </div>
+                    <div class="system-meta-item">
+                        <span>Environment Mode:</span>
+                        <strong id="admin-system-env">-</strong>
+                    </div>
+                    <button id="admin-trigger-cleanup-btn" class="auth-btn system-action-btn">
+                        <i class="fa-solid fa-broom"></i> Run Manual Cleanup (older than 7d)
+                    </button>
+                    <div id="admin-cleanup-feedback" class="cleanup-feedback hidden">
+                        <i class="fa-solid fa-circle-check"></i> Cleanup task triggered in background.
+                    </div>
+                </div>
             </div>
         </div>
     </div>

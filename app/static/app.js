@@ -6,6 +6,7 @@ let currentChartData = null;
 let jwtToken = localStorage.getItem("token") || "";
 let currentUserEmail = "";
 let isLoginMode = true;
+let isAdmin = false;
 
 // Initialize
 document.addEventListener("DOMContentLoaded", async () => {
@@ -39,8 +40,19 @@ async function checkAuth() {
 
         const data = await response.json();
         currentUserEmail = data.email;
+        isAdmin = data.is_admin || false;
         document.getElementById("user-email-display").textContent = currentUserEmail;
         
+        // Show/hide admin panel button
+        const adminBtn = document.getElementById("admin-panel-btn");
+        if (adminBtn) {
+            if (isAdmin) {
+                adminBtn.classList.remove("hidden");
+            } else {
+                adminBtn.classList.add("hidden");
+            }
+        }
+
         // Hide modal
         document.getElementById("auth-modal").classList.add("hidden");
         
@@ -91,7 +103,14 @@ function logout() {
     currentUserEmail = "";
     sessionId = "";
     selectedFile = null;
+    isAdmin = false;
     localStorage.removeItem("token");
+
+    // Hide admin UI
+    const adminBtn = document.getElementById("admin-panel-btn");
+    if (adminBtn) adminBtn.classList.add("hidden");
+    const adminModal = document.getElementById("admin-modal");
+    if (adminModal) adminModal.classList.add("hidden");
 
     // Clear file inputs UI
     document.getElementById("file-input").value = "";
@@ -503,6 +522,37 @@ function setupEventListeners() {
             URL.revokeObjectURL(url);
         }
     });
+
+    // Admin Modal Event Listeners
+    const adminPanelBtn = document.getElementById("admin-panel-btn");
+    const adminCloseBtn = document.getElementById("admin-close-btn");
+    const adminModal = document.getElementById("admin-modal");
+    const adminTabBtns = document.querySelectorAll(".admin-tab-btn");
+    const cleanupBtn = document.getElementById("admin-trigger-cleanup-btn");
+
+    if (adminPanelBtn) {
+        adminPanelBtn.addEventListener("click", () => {
+            adminModal.classList.remove("hidden");
+            switchAdminTab("admin-tab-users");
+        });
+    }
+
+    if (adminCloseBtn) {
+        adminCloseBtn.addEventListener("click", () => {
+            adminModal.classList.add("hidden");
+        });
+    }
+
+    adminTabBtns.forEach(btn => {
+        btn.addEventListener("click", () => {
+            const tabId = btn.getAttribute("data-tab");
+            switchAdminTab(tabId);
+        });
+    });
+
+    if (cleanupBtn) {
+        cleanupBtn.addEventListener("click", triggerManualCleanup);
+    }
 }
 
 // Enable/Disable Send Button
@@ -915,3 +965,286 @@ async function fetchAndRenderChart(sessId, filename) {
         console.error("Error rendering Plotly chart:", err);
     }
 }
+
+// Switch Admin Portal tabs and fetch corresponding data
+function switchAdminTab(tabId) {
+    const adminTabBtns = document.querySelectorAll(".admin-tab-btn");
+    const adminTabContents = document.querySelectorAll(".admin-tab-content");
+
+    adminTabBtns.forEach(btn => {
+        if (btn.getAttribute("data-tab") === tabId) {
+            btn.classList.add("active");
+        } else {
+            btn.classList.remove("active");
+        }
+    });
+
+    adminTabContents.forEach(content => {
+        if (content.id === tabId) {
+            content.classList.add("active");
+        } else {
+            content.classList.remove("active");
+        }
+    });
+
+    if (tabId === "admin-tab-users") {
+        loadAdminUsers();
+    } else if (tabId === "admin-tab-sessions") {
+        loadAdminSessions();
+    } else if (tabId === "admin-tab-system") {
+        loadAdminStats();
+    }
+}
+
+// Fetch and render registered users
+async function loadAdminUsers() {
+    const tbody = document.getElementById("admin-users-table-body");
+    if (!tbody) return;
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-secondary); padding: 2rem;"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading users...</td></tr>`;
+
+    try {
+        const response = await fetch("/api/admin/users", {
+            headers: getHeaders()
+        });
+        if (!response.ok) throw new Error("Failed to fetch users");
+
+        const data = await response.json();
+        tbody.innerHTML = "";
+
+        if (data.users.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 2rem;">No users registered</td></tr>`;
+            return;
+        }
+
+        data.users.forEach(user => {
+            const tr = document.createElement("tr");
+
+            // Format date if exists, or use N/A
+            const regDate = user.created_at ? new Date(user.created_at).toLocaleString() : "N/A";
+
+            // User email
+            const emailTd = document.createElement("td");
+            emailTd.textContent = user.email;
+            tr.appendChild(emailTd);
+
+            // Role badge
+            const roleTd = document.createElement("td");
+            roleTd.innerHTML = `
+                <span class="role-badge ${user.is_admin ? 'admin' : 'user'}">
+                    <i class="fa-solid ${user.is_admin ? 'fa-user-shield' : 'fa-user'}"></i>
+                    ${user.is_admin ? 'Admin' : 'User'}
+                </span>
+            `;
+            tr.appendChild(roleTd);
+
+            // Created At
+            const dateTd = document.createElement("td");
+            dateTd.textContent = regDate;
+            tr.appendChild(dateTd);
+
+            // Actions
+            const actionsTd = document.createElement("td");
+            actionsTd.style.textAlign = "center";
+            
+            const toggleBtn = document.createElement("button");
+            toggleBtn.className = "action-btn";
+            toggleBtn.innerHTML = `<i class="fa-solid fa-user-gear"></i> Toggle Role`;
+            
+            // Safety constraints: cannot demote self or the primary admin
+            if (user.email === currentUserEmail) {
+                toggleBtn.disabled = true;
+                toggleBtn.style.opacity = "0.5";
+                toggleBtn.style.cursor = "not-allowed";
+                toggleBtn.title = "You cannot demote yourself";
+            } else if (user.is_primary_admin) {
+                toggleBtn.disabled = true;
+                toggleBtn.style.opacity = "0.5";
+                toggleBtn.style.cursor = "not-allowed";
+                toggleBtn.title = "Primary administrator cannot be demoted";
+            } else {
+                toggleBtn.addEventListener("click", () => toggleUserAdminRole(user.email));
+            }
+            
+            actionsTd.appendChild(toggleBtn);
+            tr.appendChild(actionsTd);
+
+            tbody.appendChild(tr);
+        });
+    } catch (err) {
+        console.error(err);
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #f87171; padding: 2rem;"><i class="fa-solid fa-circle-exclamation"></i> Error loading users</td></tr>`;
+    }
+}
+
+// Toggle user admin role
+async function toggleUserAdminRole(email) {
+    if (!confirm(`Toggle admin privileges for ${email}?`)) return;
+
+    try {
+        const response = await fetch(`/api/admin/users/${email}/toggle-admin`, {
+            method: "POST",
+            headers: getHeaders()
+        });
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.detail || "Failed to toggle role");
+        }
+        await loadAdminUsers();
+    } catch (err) {
+        console.error("Error toggling admin role:", err);
+        alert(err.message);
+    }
+}
+
+// Fetch and render all sessions across all users
+async function loadAdminSessions() {
+    const tbody = document.getElementById("admin-sessions-table-body");
+    if (!tbody) return;
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-secondary); padding: 2rem;"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading sessions...</td></tr>`;
+
+    try {
+        const response = await fetch("/api/admin/sessions", {
+            headers: getHeaders()
+        });
+        if (!response.ok) throw new Error("Failed to fetch sessions");
+
+        const data = await response.json();
+        tbody.innerHTML = "";
+
+        if (data.sessions.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 2rem;">No active sessions in the system</td></tr>`;
+            return;
+        }
+
+        data.sessions.forEach(sess => {
+            const tr = document.createElement("tr");
+
+            // Session ID
+            const idTd = document.createElement("td");
+            idTd.textContent = sess.id;
+            idTd.style.fontFamily = "var(--font-mono)";
+            idTd.style.fontSize = "0.8rem";
+            tr.appendChild(idTd);
+
+            // User Email
+            const userTd = document.createElement("td");
+            userTd.textContent = sess.user_id;
+            tr.appendChild(userTd);
+
+            // Last Active
+            const lastActive = new Date(sess.last_update_time * 1000).toLocaleString();
+            const dateTd = document.createElement("td");
+            dateTd.textContent = lastActive;
+            tr.appendChild(dateTd);
+
+            // Actions
+            const actionsTd = document.createElement("td");
+            actionsTd.style.textAlign = "center";
+            
+            const deleteBtn = document.createElement("button");
+            deleteBtn.className = "action-btn danger-btn";
+            deleteBtn.innerHTML = `<i class="fa-solid fa-trash-can"></i> Force End`;
+            deleteBtn.addEventListener("click", () => deleteUserSessionAdmin(sess.user_id, sess.id));
+            
+            actionsTd.appendChild(deleteBtn);
+            tr.appendChild(actionsTd);
+
+            tr.style.opacity = (sess.id === sessionId) ? "0.9" : "1";
+            tbody.appendChild(tr);
+        });
+    } catch (err) {
+        console.error(err);
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #f87171; padding: 2rem;"><i class="fa-solid fa-circle-exclamation"></i> Error loading sessions</td></tr>`;
+    }
+}
+
+// Delete user session from Admin Panel
+async function deleteUserSessionAdmin(userId, sessionToDeleteId) {
+    const promptMessage = sessionToDeleteId === sessionId 
+        ? `Force end your OWN active session ${sessionToDeleteId}? You will be disconnected from this session.`
+        : `Force end and delete session ${sessionToDeleteId} for user ${userId}? This will remove all associated chat history and artifacts.`;
+
+    if (!confirm(promptMessage)) return;
+
+    try {
+        const response = await fetch(`/api/admin/sessions/${userId}/${sessionToDeleteId}`, {
+            method: "DELETE",
+            headers: getHeaders()
+        });
+        if (!response.ok) throw new Error("Failed to delete session");
+
+        // If the admin deleted their own current session, reset current session state
+        if (sessionToDeleteId === sessionId) {
+            sessionId = "";
+            document.getElementById("admin-modal").classList.add("hidden");
+            await loadSessionsList();
+        } else {
+            await loadAdminSessions();
+        }
+    } catch (err) {
+        console.error("Error deleting session:", err);
+        alert(err.message);
+    }
+}
+
+// Fetch and render system stats
+async function loadAdminStats() {
+    try {
+        const response = await fetch("/api/admin/stats", {
+            headers: getHeaders()
+        });
+        if (!response.ok) throw new Error("Failed to fetch stats");
+
+        const data = await response.json();
+        
+        document.getElementById("admin-stat-users").textContent = data.total_users;
+        document.getElementById("admin-stat-sessions").textContent = data.total_sessions;
+        document.getElementById("admin-stat-admins").textContent = data.admin_users;
+        document.getElementById("admin-system-db-type").textContent = data.db_type;
+        document.getElementById("admin-system-env").textContent = data.environment;
+    } catch (err) {
+        console.error("Error loading admin stats:", err);
+    }
+}
+
+// Run manual GCS and Firestore cleanups
+async function triggerManualCleanup() {
+    const cleanupBtn = document.getElementById("admin-trigger-cleanup-btn");
+    const feedback = document.getElementById("admin-cleanup-feedback");
+    if (!cleanupBtn || !feedback) return;
+
+    if (!confirm("Are you sure you want to trigger manual cleanup of data older than 7 days?")) return;
+
+    cleanupBtn.disabled = true;
+    cleanupBtn.style.opacity = "0.5";
+    cleanupBtn.style.cursor = "not-allowed";
+
+    try {
+        const response = await fetch("/api/admin/cleanup", {
+            method: "POST",
+            headers: getHeaders()
+        });
+        if (!response.ok) throw new Error("Failed to run cleanup");
+
+        feedback.classList.remove("hidden");
+        
+        // Reload stats in background
+        setTimeout(async () => {
+            await loadAdminStats();
+        }, 1500);
+
+        setTimeout(() => {
+            feedback.classList.add("hidden");
+            cleanupBtn.disabled = false;
+            cleanupBtn.style.opacity = "1";
+            cleanupBtn.style.cursor = "pointer";
+        }, 4000);
+    } catch (err) {
+        console.error("Cleanup failed:", err);
+        alert("Cleanup error: " + err.message);
+        cleanupBtn.disabled = false;
+        cleanupBtn.style.opacity = "1";
+        cleanupBtn.style.cursor = "pointer";
+    }
+}
+
