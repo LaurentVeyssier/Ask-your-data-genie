@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8080"
+    env_file:
+      - .env
+    environment:
+      # Direct Google SDK to find credentials mounted in the container
+      - GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json
+    volumes:
+      # Persist SQLite users database locally on the host
+      - ./local_users.db:/code/local_users.db
+      
+      # Mount Google Cloud Application Default Credentials (ADC) from host
+      # Windows (PowerShell / CMD default path):
+      - ${APPDATA}/gcloud:/root/.config/gcloud:ro
+      
+      # For macOS/Linux developers, comment the line above and uncomment the line below:
+      # - ${HOME}/.config/gcloud:/root/.config/gcloud:ro

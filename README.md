@@ -95,6 +95,8 @@ uv sync
 ```
 
 ### 3. Running Locally
+
+#### Option A: Direct Host Execution (Standard local development)
 Run the FastAPI development server:
 ```bash
 uv run uvicorn app.fast_api_app:app --reload --host 127.0.0.1 --port 8000
@@ -104,6 +106,19 @@ Open your browser and navigate to `http://127.0.0.1:8000`.
 - Register a new account.
 - If your credentials match `ADMIN_EMAIL`, the violet **Admin Panel** button will become visible in the header.
 - You can set the admin email in the `.env` file with the `ADMIN_EMAIL` variable on your first time running the application.
+
+#### Option B: Secure Containerized Execution (Isolated Sandbox)
+To isolate code execution and protect your host machine from untrusted AI-generated Python code:
+1. Ensure **Docker Desktop** is running.
+2. Authenticate Google Cloud SDK locally to generate Application Default Credentials (ADC):
+   ```bash
+   gcloud auth application-default login
+   ```
+3. Launch the container stack:
+   ```bash
+   docker compose up --build
+   ```
+4. Access the interface at `http://localhost:8000`. The application and all Python code executed by the agent will run isolated inside the container. Your host machine files and processes are fully protected.
 
 ---
 
