@@ -30,13 +30,21 @@ from app.local_executor import FileSavingLocalCodeExecutor
 # Set up standard Google Cloud credentials and parameters
 try:
     _, project_id = google.auth.default()
-    os.environ["GOOGLE_CLOUD_PROJECT"] = project_id
+    if "GOOGLE_CLOUD_PROJECT" not in os.environ:
+        os.environ["GOOGLE_CLOUD_PROJECT"] = project_id
 except Exception:
     # Fallback if running in a credential-less environment
-    os.environ["GOOGLE_CLOUD_PROJECT"] = os.getenv("GOOGLE_CLOUD_PROJECT", "mock-project")
+    if "GOOGLE_CLOUD_PROJECT" not in os.environ:
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "mock-project"
 
 os.environ["GOOGLE_CLOUD_LOCATION"] = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
-os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "True"
+
+# Configure whether to run using the enterprise Vertex AI backend or Gemini Developer API (using API Key)
+# Default to "True" (Vertex AI) if not specified. Supports both legacy/new SDK settings.
+# This mapping handles both the legacy GOOGLE_GENAI_USE_VERTEXAI and the newer GOOGLE_GENAI_USE_ENTERPRISE environment variables seamlessly, preventing deprecation warnings
+use_vertex = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", os.getenv("GOOGLE_GENAI_USE_ENTERPRISE", "True"))
+os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = use_vertex
+os.environ["GOOGLE_GENAI_USE_ENTERPRISE"] = use_vertex
 
 # System instruction guiding the model on how to write code and generate Plotly charts
 SYSTEM_INSTRUCTION: str = """You are a highly capable Data Science AI Assistant.

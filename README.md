@@ -78,6 +78,8 @@ cp .env.example .env
 | `GOOGLE_CLOUD_PROJECT` | GCP Project ID (required for Firestore and Vertex AI in production) | `your-gcp-project-id` |
 | `GOOGLE_CLOUD_LOCATION` | Region location for Vertex API calls | `global` |
 | `LOGS_BUCKET_NAME` | GCP Storage Bucket name for session file artifacts | `your-gcs-bucket-name` |
+| `GOOGLE_GENAI_USE_VERTEXAI` | Backend selector: `'True'` for GCP Vertex AI, `'False'` for Gemini Developer API | `True` |
+| `GEMINI_API_KEY` | API Key for Gemini Developer API (required when `GOOGLE_GENAI_USE_VERTEXAI=False`) | *None* |
 
 ---
 
