@@ -116,6 +116,7 @@ To isolate code execution and protect your host machine from untrusted AI-genera
    ```bash
    gcloud auth application-default login
    ```
+   *Note: Ensure the `GOOGLE_CLOUD_PROJECT` variable in your `.env` matches the active project ID returned by running `gcloud config get-value project` on your host, otherwise Vertex AI requests will return a 403 Permission Denied error.*
 3. Launch the container stack:
    ```bash
    docker compose up --build
