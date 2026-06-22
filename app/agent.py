@@ -171,7 +171,7 @@ async def clean_history_callback(
 root_agent: Agent = Agent(
     name="root_agent",
     model=Gemini(
-        model="gemini-3.5-flash",
+        model=os.getenv("GEMINI_MODEL", "gemini-3.5-flash"),
         retry_options=types.HttpRetryOptions(attempts=3),
     ),
     generate_content_config=types.GenerateContentConfig(
