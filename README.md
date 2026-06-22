@@ -63,7 +63,7 @@ ask-your-data/
 
 ## ⚙️ Configuration & Environment
 
-Copy [.env.example](file:///c:/Users/lveys/Documents/SKP_Notebooks/other_projects/RAG/ask-your-data/.env.example) to `.env` and adjust the variables:
+Copy [.env.example](.env.example) to `.env` and adjust the variables:
 
 ```bash
 cp .env.example .env
@@ -103,6 +103,7 @@ Open your browser and navigate to `http://127.0.0.1:8000`.
 
 - Register a new account.
 - If your credentials match `ADMIN_EMAIL`, the violet **Admin Panel** button will become visible in the header.
+- You can set the admin email in the `.env` file with the `ADMIN_EMAIL` variable on your first time running the application.
 
 ---
 
