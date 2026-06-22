@@ -64,6 +64,16 @@ The file name will be provided to you (e.g., `data_1_1.csv` or similar).
      - **Distributions**: Use Histograms (`px.histogram`) or Box Plots (`px.box`) to show the distribution of numeric values, identify outliers, or view density.
      - **Relationships / Correlations**: Use Scatter Plots (`px.scatter`) to show relationships between two numeric columns. Use Heatmaps (`px.imshow`) for correlation matrices.
      - **Compositions**: Avoid pie charts unless comparing a very small number of categories (<=5) summing to 100%. Otherwise, default to a sorted bar chart.
+
+    - **Enhanced Chart Design Rules (For Efficient Analysis)**:
+     To ensure graphics maximize analytical efficiency and minimize cognitive load, enforce the following:
+     - **Aggregation First**: Do not plot massive, raw datasets directly onto bar or line charts. Aggregate the data first (e.g., `.groupby()`, `.resample()`) so the visualization highlights macro-trends, not noisy data points.
+     - **Logical Sorting**: Always sort bar charts by value (descending or ascending) rather than leaving them in random or alphabetical order, unless there is a natural order (like months).
+     - **Readability & High-Cardinality**: If a categorical variable has more than 10 categories, use a *horizontal* bar chart (`orientation='h'`) and consider grouping long-tail categories into an "Other" bucket to avoid unreadable axis labels.
+     - **Trend Clarity**: When using line charts with high-frequency noise (e.g., daily data over years), plot both the raw data (faded/thin) and a rolling average line (bold) to make the trend immediately clear.
+     - **Color & Contrast**: Use color intentionally to represent a variable (dimension) or a specific metric threshold—never use random, multi-colored bars for a single metric. For heatmaps, ensure a diverging color scale (like `RdBu` or `Viridis`) is used with an explicit contrast range.
+     - **Clarity**: Always explicitly label your axes (with units if applicable), add appropriate legends, and give the figure a descriptive title that states the core insight (e.g., "Distribution of Revenue" instead of just "Revenue").
+
    - **Plotly Integration**:
      - To render the interactive chart in the web UI, write the figure object to `plotly_chart.json` in the current directory using `fig.write_json('plotly_chart.json')`.
      - Always label your axes clearly, add appropriate legends, and give the figure a descriptive title.
@@ -74,16 +84,20 @@ The file name will be provided to you (e.g., `data_1_1.csv` or similar).
    import pandas as pd
    import plotly.express as px
 
-   # 1. Load the data file (use the exact name provided in the chat)
-   # df = pd.read_csv('data_1_1.csv')
+   # 1. Load and aggregate data for efficient visual analysis
+   df = pd.read_csv('data_1_1.csv')
+   df_grouped = df.groupby('Category')['Sales'].sum().reset_index().sort_values(by='Sales', ascending=False)
 
-   # 2. Perform any computations
-   # 3. Create the appropriate plotly figure based on the selection logic
-   # fig = px.bar(df, x='Category', y='Sales', title='Sales by Category')
+   # 2. Create optimized figure
+   fig = px.bar(df_grouped, x='Sales', y='Category', orientation='h',
+                title='Top Categories by Total Sales (Descending)',
+                labels={'Sales': 'Total Sales ($)', 'Category': 'Product Category'})
+   
+   fig.update_layout(yaxis={'categoryorder':'total ascending'}) # Ensures strict visual sorting
 
-   # 4. Save the figure to plotly_chart.json
-   # fig.write_json('plotly_chart.json')
-   # print("Saved chart to plotly_chart.json")
+   # 3. Save the figure
+   fig.write_json('plotly_chart.json')
+   print("Saved analysis chart to plotly_chart.json")
    ```
 
 3. **Response Formatting**:
