@@ -13,12 +13,13 @@ services:
       # Direct Google SDK to find credentials mounted in the container
       - GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json
     volumes:
-      # Persist SQLite users database locally on the host
+      # Mounts local_users.db as a volume to persist SQLite users database locally on the host
+      # Registered accounts and sessions are persisted on the host and not lost when the container stops
       - ./local_users.db:/code/local_users.db
-      
+
       # Mount Google Cloud Application Default Credentials (ADC) from host
+      # so the container can authenticate with Vertex AI/Gemini 
       # Windows (PowerShell / CMD default path):
       - ${APPDATA}/gcloud:/root/.config/gcloud:ro
-      
       # For macOS/Linux developers, comment the line above and uncomment the line below:
       # - ${HOME}/.config/gcloud:/root/.config/gcloud:ro
