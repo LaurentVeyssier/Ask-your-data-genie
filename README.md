@@ -104,7 +104,42 @@ Install project dependencies:
 uv sync
 ```
 
-### 3. Running Locally
+### 3. Choose your LLM Backend
+
+Before launching the application, you must decide how the agent will communicate with the Gemini LLM. You have two options:
+
+#### Option 1: Google AI Studio (Gemini Developer API Key) — *Recommended for free, zero-config local runs*
+* **Pros**: 100% free standard usage; requires no GCP infrastructure or billing setup.
+* **Setup**:
+  1. Generate a free API key from [Google AI Studio](https://aistudio.google.com/).
+  2. Add the key to your `.env` file and set `GOOGLE_GENAI_USE_VERTEXAI` to `False`:
+     ```env
+     GOOGLE_GENAI_USE_VERTEXAI=False
+     GEMINI_API_KEY=AIzaSy...your_key_here
+     ```
+
+#### Option 2: GCP Vertex AI — *Required for systematic evaluations (ADK eval) and production*
+* **Pros**: Much higher rate limits; production-grade monitoring, trace logging, and IAM security.
+* **GCP Setup Steps**:
+  1. **Select or Create a GCP Project**: Ensure you have an active Google Cloud project with billing enabled.
+  2. **Enable Vertex AI API**: Enable the Vertex AI service inside your project:
+     ```bash
+     gcloud services enable aiplatform.googleapis.com --project your-gcp-project-id
+     ```
+  3. **Generate Application Default Credentials (ADC)**: Run the following in your terminal to authenticate your local development machine:
+     ```bash
+     gcloud auth application-default login
+     ```
+  4. **Configure `.env`**: Set `GOOGLE_GENAI_USE_VERTEXAI` to `True` and specify your project details:
+     ```env
+     GOOGLE_GENAI_USE_VERTEXAI=True
+     GOOGLE_CLOUD_PROJECT=your-gcp-project-id
+     GOOGLE_CLOUD_LOCATION=global
+     ```
+
+---
+
+### 4. Running Locally
 
 #### Option A: Direct Host Execution (Standard local development)
 Run the FastAPI development server:
@@ -120,7 +155,7 @@ Open your browser and navigate to `http://127.0.0.1:8000`.
 #### Option B: Secure Containerized Execution (Isolated Sandbox)
 To isolate code execution and protect your host machine from untrusted AI-generated Python code:
 1. Ensure **Docker Desktop** is running.
-2. Authenticate Google Cloud SDK locally to generate Application Default Credentials (ADC):
+2. *(Only if using Vertex AI backend)* Authenticate Google Cloud SDK locally to generate Application Default Credentials (ADC):
    ```bash
    gcloud auth application-default login
    ```
