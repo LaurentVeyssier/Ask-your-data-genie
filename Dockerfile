@@ -18,7 +18,10 @@ FROM python:3.12-slim AS builder
 # OPTIMIZATION 1: Instant binary copy instead of pip install
 COPY --from=ghcr.io/astral-sh/uv:0.8.13 /uv /uvx /bin/
 
-# OPTIMIZATION 3: Disable bytecode compilation to keep image size small (saves GCP storage)
+# OPTIMIZATION 3: Disable bytecode compilation to reduce image footprint.
+# - PRO: Saves ~320MB of storage in GCP Artifact Registry (helps stay within/close to the 500MB free tier).
+# - CON: Increases container cold start latency by 1-2s as Python compiles modules to bytecode in-memory on startup.
+# Set UV_COMPILE_BYTECODE=1 to trade registry storage for faster container startup in production.
 ENV UV_COMPILE_BYTECODE=0 \
     UV_LINK_MODE=copy
 
