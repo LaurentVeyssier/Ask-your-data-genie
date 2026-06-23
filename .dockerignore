@@ -7,6 +7,7 @@
 scratch
 tests
 GEMINI.md
+HOW_TO.txt
 *.log
 **/__pycache__
 **/*.pyc
