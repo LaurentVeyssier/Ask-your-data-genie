@@ -175,6 +175,18 @@ async def clean_history_callback(
                 
     llm_request.contents = merged_contents
 
+async def init_agent_callback(callback_context: CallbackContext) -> None:
+    """Ensures that the artifact service is initialized during agent runs.
+    This is especially required for offline/eval runs (e.g. `agents-cli eval generate`)
+    where the ADK framework executes the agent without initializing the artifact service,
+    which would otherwise crash the local code executor post-processor with a ValueError.
+    """
+    inv_ctx = getattr(callback_context, "_invocation_context", None)
+    if inv_ctx and getattr(inv_ctx, "artifact_service", None) is None:
+        from google.adk.artifacts import InMemoryArtifactService
+        inv_ctx.artifact_service = InMemoryArtifactService()
+
+
 # Define the root agent with our custom FileSavingLocalCodeExecutor
 root_agent: Agent = Agent(
     name="root_agent",
@@ -190,6 +202,7 @@ root_agent: Agent = Agent(
         timeout_seconds=30.0,
     ),
     before_model_callback=clean_history_callback,
+    before_agent_callback=init_agent_callback,
 )
 
 # Instantiate the ADK App

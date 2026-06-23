@@ -13,6 +13,20 @@
         "role": "user",
         "parts": [{"text": "What's the weather like in San Francisco?"}]
       }
+    },
+    {
+      "eval_case_id": "data_analysis_summary",
+      "prompt": {
+        "role": "user",
+        "parts": [{"text": "Read the file eval_data.csv. What are the total sales for each category?"}]
+      }
+    },
+    {
+      "eval_case_id": "data_analysis_plot",
+      "prompt": {
+        "role": "user",
+        "parts": [{"text": "Please plot a bar chart of the sales for each category in eval_data.csv."}]
+      }
     }
   ]
 }

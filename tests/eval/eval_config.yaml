@@ -3,8 +3,39 @@ metrics_to_run:
 
 custom_metrics:
   - name: custom_response_quality
-    prompt_template: |
-      You are an expert quality assurance evaluator for an enterprise AI assistant. Your task is to evaluate the agent's final response given the user prompt and the full agent trace (for tool-call and reasoning context).
+    custom_function: |
+      def evaluate(instance):
+          import os
+          import json
+          import dotenv
+          from google.genai import Client
+          
+          # Load local environment variables from .env
+          dotenv.load_dotenv(override=True)
+          
+          # Initialize client matching the user's active API backend
+          use_vertex = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", os.getenv("GOOGLE_GENAI_USE_ENTERPRISE", "True")) == "True"
+          client = Client(vertexai=use_vertex)
+          
+          prompt = instance.get("prompt", {}).get("parts", [{}])[0].get("text", "")
+          
+          # Extract the final model response
+          response_turns = (instance.get("agent_data") or {}).get("turns", [])
+          final_resp = ""
+          for turn in reversed(response_turns):
+              for event in turn.get("events", []):
+                  if event.get("author") == "root_agent":
+                      parts = event.get("content", {}).get("parts", [])
+                      for part in parts:
+                          if part.get("text"):
+                              final_resp = part.get("text")
+                              break
+              if final_resp:
+                  break
+                  
+          agent_data = json.dumps(instance.get("agent_data", {}), indent=2)
+          
+          judge_prompt = f"""You are an expert quality assurance evaluator for an enterprise AI assistant. Your task is to evaluate the agent's final response given the user prompt and the full agent trace (for tool-call and reasoning context).
 
       Please grade the response quality on a scale of 1 to 5 according to the following criteria:
       1 (Poor): The response fails to address the query, contains incorrect information, or is highly confusing.
@@ -15,16 +46,25 @@ custom_metrics:
 
       ### Target Evaluation:
       User Prompt: {prompt}
-      Final Response: {response}
+      Final Response: {final_resp}
       Full Agent Trace: {agent_data}
 
       Return your evaluation as a valid JSON object matching this structure:
-      {
+      {{
         "score": <integer between 1 and 5>,
         "explanation": "<detailed string explaining the rationale for the score assigned>"
-      }
-  - name: agent_turn_count
-    custom_function: |
-      def evaluate(instance):
-          turns = (instance.get("agent_data") or {}).get("turns", [])
-          return {'score': len(turns)}
+      }}
+      """
+          
+          try:
+              # Use the configured model name or fall back
+              model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+              res = client.models.generate_content(
+                  model=model,
+                  contents=judge_prompt,
+                  config={"response_mime_type": "application/json"}
+              )
+              data = json.loads(res.text)
+              return {"score": int(data["score"]), "explanation": data.get("explanation", "")}
+          except Exception as e:
+              return {"score": 1, "explanation": f"Evaluation error: {str(e)}"}
