@@ -18,8 +18,8 @@ FROM python:3.12-slim AS builder
 # OPTIMIZATION 1: Instant binary copy instead of pip install
 COPY --from=ghcr.io/astral-sh/uv:0.8.13 /uv /uvx /bin/
 
-# OPTIMIZATION 3: Pre-compile bytecode for faster GCP cold starts
-ENV UV_COMPILE_BYTECODE=1 \
+# OPTIMIZATION 3: Disable bytecode compilation to keep image size small (saves GCP storage)
+ENV UV_COMPILE_BYTECODE=0 \
     UV_LINK_MODE=copy
 
 WORKDIR /code
