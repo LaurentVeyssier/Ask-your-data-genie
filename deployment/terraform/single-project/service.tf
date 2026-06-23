@@ -129,3 +129,12 @@ resource "google_cloud_run_v2_service" "app" {
     resource.google_project_service.services,
   ]
 }
+
+resource "google_cloud_run_v2_service_iam_member" "public_access" {
+  name     = google_cloud_run_v2_service.app.name
+  location = google_cloud_run_v2_service.app.location
+  project  = google_cloud_run_v2_service.app.project
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
