@@ -134,7 +134,7 @@ async def test_get_session_gcs_and_fallback(mock_storage_client_cls):
     
     mock_blob.exists.return_value = True
     event = Event(author="user", content={"parts": [{"text": "Hello GCS"}]})
-    mock_blob.download_as_text.return_value = json.dumps([event.model_dump(by_alias=True)])
+    mock_blob.download_as_text.return_value = json.dumps([event.model_dump_json(by_alias=True)])
 
     service = FirestoreSessionService(firestore_client=mock_db, bucket_name="my-test-bucket")
     

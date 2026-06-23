@@ -57,7 +57,7 @@ class FirestoreSessionService(BaseSessionService):
         """
         if not self.bucket_name:
             return
-        events_json = json.dumps([e.model_dump(by_alias=True) for e in events])
+        events_json = json.dumps([e.model_dump_json(by_alias=True) for e in events])
         
         def _upload():
             client = storage.Client()
@@ -95,7 +95,7 @@ class FirestoreSessionService(BaseSessionService):
                 return None
             
             events_list = json.loads(events_str)
-            return [Event.model_validate(e) for e in events_list]
+            return [Event.model_validate_json(e_str) for e_str in events_list]
         except Exception as e:
             logger.error("Failed to load events from GCS for %s: %s", session_id, e)
             return None
