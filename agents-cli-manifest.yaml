@@ -1,7 +1,7 @@
 name: "ask-your-data"
 acli_version: "0.5.0"
 agent_directory: "app"
-region: "us-east1"
+region: "global"
 base_template: "adk"
 generated_at: "2026-06-21T15:50:41.914215+00:00"
 language: "python"
