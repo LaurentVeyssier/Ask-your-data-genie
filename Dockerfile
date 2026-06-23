@@ -15,30 +15,43 @@
 # Stage 1: Build virtual environment
 FROM python:3.12-slim AS builder
 
-# Install uv package manager
-RUN pip install --no-cache-dir uv==0.8.13
+# OPTIMIZATION 1: Instant binary copy instead of pip install
+COPY --from=ghcr.io/astral-sh/uv:0.8.13 /uv /uvx /bin/
+
+# OPTIMIZATION 3: Pre-compile bytecode for faster GCP cold starts
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy
 
 WORKDIR /code
 
 # Copy package config files
 COPY ./pyproject.toml ./uv.lock* ./README.md ./
 
-# Sync dependencies (excluding dev tools)
-RUN uv sync --frozen --no-dev --no-editable
+# OPTIMIZATION 2: Cache mount ensures blazing-fast local iterations
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-editable
 
 # Stage 2: Final minimal runtime image
 FROM python:3.12-slim AS runner
 
+# Production logging optimization for GCP Cloud Logging
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/code/.venv/bin:$PATH"
+
 WORKDIR /code
 
-# Copy the virtual environment from the builder stage
-COPY --from=builder /code/.venv /code/.venv
+# OPTIMIZATION 4: Security Hardening (Non-root user for GCP)
+# Create appuser first so we can copy files with correct ownership
+RUN useradd -m -u 8888 appuser && chown appuser:appuser /code
 
-# Copy the application source code
-COPY ./app ./app
+# Copy the virtual environment from the builder stage with correct ownership
+COPY --chown=appuser:appuser --from=builder /code/.venv /code/.venv
 
-# Add virtual environment to PATH
-ENV PATH="/code/.venv/bin:$PATH"
+# Copy the application source code with correct ownership
+COPY --chown=appuser:appuser ./app ./app
+
+USER appuser
 
 ARG COMMIT_SHA=""
 ENV COMMIT_SHA=${COMMIT_SHA}
@@ -48,5 +61,4 @@ ENV AGENT_VERSION=${AGENT_VERSION}
 
 EXPOSE 8080
 
-# Run uvicorn directly from the virtual environment
 CMD ["uvicorn", "app.fast_api_app:app", "--host", "0.0.0.0", "--port", "8080"]
