@@ -131,6 +131,70 @@ To isolate code execution and protect your host machine from untrusted AI-genera
    ```
 4. Access the interface at `http://localhost:8000`. The application and all Python code executed by the agent will run isolated inside the container. Your host machine files and processes are fully protected.
 
+#### 🐳 Dockerfile Optimization Walkthrough
+
+The application's [Dockerfile](Dockerfile) implements a highly optimized **Multi-Stage Build** designed for rapid local developer rebuilds and secure, hardened production deployments:
+
+```dockerfile
+# Stage 1: Build virtual environment
+FROM python:3.12-slim AS builder
+
+# OPTIMIZATION 1: Direct binary copy instead of pip install
+COPY --from=ghcr.io/astral-sh/uv:0.8.13 /uv /uvx /bin/
+
+# OPTIMIZATION 2: Pre-configure build parameters
+ENV UV_COMPILE_BYTECODE=0 \
+    UV_LINK_MODE=copy
+
+WORKDIR /code
+
+# Copy package config files
+COPY ./pyproject.toml ./uv.lock* ./README.md ./
+
+# OPTIMIZATION 3: Cache mount ensures blazing-fast local iterations
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-editable
+
+# Stage 2: Final minimal runtime image
+FROM python:3.12-slim AS runner
+
+# Production logging & environment optimization
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/code/.venv/bin:$PATH"
+
+WORKDIR /code
+
+# OPTIMIZATION 5: Security Hardening (Non-root user for GCP)
+# Create appuser and change ownership of workdir /code to allow SQLite journal writes
+RUN useradd -m -u 8888 appuser && chown appuser:appuser /code
+
+# OPTIMIZATION 4: File copy with pre-set ownership (no slow chown -R)
+COPY --chown=appuser:appuser --from=builder /code/.venv /code/.venv
+COPY --chown=appuser:appuser ./app ./app
+
+USER appuser
+
+ARG COMMIT_SHA=""
+ENV COMMIT_SHA=${COMMIT_SHA}
+
+ARG AGENT_VERSION=0.0.0
+ENV AGENT_VERSION=${AGENT_VERSION}
+
+EXPOSE 8080
+
+CMD ["uvicorn", "app.fast_api_app:app", "--host", "0.0.0.0", "--port", "8080"]
+```
+
+##### Key Optimization Steps:
+1. **Direct Binary Copy of `uv`**: Instead of running a standard `pip install uv` (which triggers Python network fetches every time the layer cache busts), we copy the precompiled rust binaries directly from the official `ghcr.io/astral-sh/uv` image. This reduces setup time to milliseconds.
+2. **BuildKit cache mounts (`--mount=type=cache`)**: We mount a persistent download cache directory `/root/.cache/uv` from the host. When you add new libraries to `pyproject.toml`, Docker preserves `uv`'s download cache locally, turning a 1-minute dependency installation into a 2-second update.
+3. **Multi-Stage Separation & Pruning**: 
+   - **Stage 1 (builder)**: Prepares the virtual environment and excludes the `dev` dependency group (`uv sync --no-dev --no-editable`) keeping the footprint to a minimum.
+   - **Stage 2 (runner)**: Copies only the compiled `.venv` and application code, discarding the builder caches and the `uv` tool itself. This drops the image size down to **`884 MB`** (which also keeps GCP Artifact Registry storage billing to a negligible cost).
+4. **Copy Ownership (`--chown`)**: We create our non-root `appuser` first, then copy files from the builder using `COPY --chown=appuser:appuser`. This completely avoids running `chown -R appuser:appuser /code` on the final filesystem (which contains thousands of nested dependencies and takes a long time at build time).
+5. **Security Hardening (Non-root run)**: The container switches to `USER appuser` (UID `8888`) to neutralize the security risk of running the FastAPI process with root privileges. We also set `chown appuser:appuser /code` on the parent directory itself so that the SQLite database engine can successfully write temporary transaction journals and lock files (like `-journal` or `-wal` files) inside `/code`.
+
 ---
 
 ## 🧪 Testing
