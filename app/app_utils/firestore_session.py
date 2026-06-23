@@ -16,6 +16,8 @@
 
 import time
 import logging
+import json
+import asyncio
 from typing import Optional, Any
 from google.cloud.firestore import AsyncClient
 from google.cloud import storage
@@ -46,6 +48,58 @@ class FirestoreSessionService(BaseSessionService):
         self.bucket_name = bucket_name
         self.collection_name = collection_name
 
+    async def _save_events_to_gcs(self, session_id: str, events: list[Event]) -> None:
+        """Serializes and writes the events list to GCS.
+
+        Args:
+            session_id: The session ID.
+            events: The list of Event instances.
+        """
+        if not self.bucket_name:
+            return
+        events_json = json.dumps([e.model_dump(by_alias=True) for e in events])
+        
+        def _upload():
+            client = storage.Client()
+            bucket = client.bucket(self.bucket_name)
+            blob_path = f"sessions/{session_id}/events.json"
+            blob = bucket.blob(blob_path)
+            blob.upload_from_string(events_json, content_type="application/json")
+            logger.info("Saved %d events to GCS path %s", len(events), blob_path)
+            
+        await asyncio.to_thread(_upload)
+
+    async def _load_events_from_gcs(self, session_id: str) -> Optional[list[Event]]:
+        """Downloads and deserializes the events list from GCS.
+
+        Args:
+            session_id: The session ID.
+
+        Returns:
+            The list of Event instances, or None if not found/error.
+        """
+        if not self.bucket_name:
+            return None
+        def _download():
+            client = storage.Client()
+            bucket = client.bucket(self.bucket_name)
+            blob_path = f"sessions/{session_id}/events.json"
+            blob = bucket.blob(blob_path)
+            if not blob.exists():
+                return None
+            return blob.download_as_text()
+            
+        try:
+            events_str = await asyncio.to_thread(_download)
+            if events_str is None:
+                return None
+            
+            events_list = json.loads(events_str)
+            return [Event.model_validate(e) for e in events_list]
+        except Exception as e:
+            logger.error("Failed to load events from GCS for %s: %s", session_id, e)
+            return None
+
     async def _save_session(self, session: Session) -> None:
         """Serializes and writes the Session object to Firestore.
 
@@ -70,14 +124,17 @@ class FirestoreSessionService(BaseSessionService):
             "session_json": session_json
         })
 
-        # Save each event to the events subcollection
-        for idx, event in enumerate(events):
-            event_ref = doc_ref.collection("events").document(str(idx))
-            await event_ref.set({
-                "event_json": event.model_dump_json(),
-                "timestamp": event.timestamp,
-                "idx": idx
-            })
+        if self.bucket_name:
+            await self._save_events_to_gcs(session.id, events)
+        else:
+            # Save each event to the events subcollection
+            for idx, event in enumerate(events):
+                event_ref = doc_ref.collection("events").document(str(idx))
+                await event_ref.set({
+                    "event_json": event.model_dump_json(),
+                    "timestamp": event.timestamp,
+                    "idx": idx
+                })
 
     async def create_session(
         self,
@@ -154,24 +211,29 @@ class FirestoreSessionService(BaseSessionService):
             logger.error("Failed to validate Session JSON for %s: %s", session_id, e)
             return None
 
-        # Load events list from subcollection
-        try:
-            events_ref = doc_ref.collection("events").order_by("idx")
-            events_docs = events_ref.stream()
-            events = []
-            async for event_doc in events_docs:
-                event_data = event_doc.to_dict()
-                if event_data and "event_json" in event_data:
-                    events.append(Event.model_validate_json(event_data["event_json"]))
-            
-            # Fallback: only overwrite session.events if subcollection has events,
-            # or if the subcollection is empty but the deserialized session also has no events.
-            # (Maintains compatibility with legacy single-document sessions).
-            if events or not session.events:
-                session.events = events
-        except Exception as e:
-            logger.error("Failed to load events subcollection for %s: %s", session_id, e)
-            return None
+        # Load events list from GCS (or fall back to Firestore events subcollection)
+        events = None
+        if self.bucket_name:
+            events = await self._load_events_from_gcs(session_id)
+
+        if events is None:
+            try:
+                events_ref = doc_ref.collection("events").order_by("idx")
+                events_docs = events_ref.stream()
+                events = []
+                async for event_doc in events_docs:
+                    event_data = event_doc.to_dict()
+                    if event_data and "event_json" in event_data:
+                        events.append(Event.model_validate_json(event_data["event_json"]))
+            except Exception as e:
+                logger.error("Failed to load events subcollection for %s: %s", session_id, e)
+                return None
+
+        # Fallback: only overwrite session.events if loaded events are not None or empty,
+        # or if they are empty but the deserialized session also has no events.
+        # (Maintains compatibility with legacy single-document sessions).
+        if events or not session.events:
+            session.events = events
 
         # Filter events if config is provided
         if config:
@@ -237,14 +299,21 @@ class FirestoreSessionService(BaseSessionService):
             logger.error("Failed to delete events subcollection for %s: %s", session_id, e)
         await doc_ref.delete()
 
-        # Delete GCS artifacts
+        # Delete GCS artifacts and the events.json file
         if self.bucket_name:
             try:
                 import asyncio
                 def _purge():
                     client = storage.Client()
                     bucket = client.bucket(self.bucket_name)
-                    # GcsArtifactService formats GCS blob paths like: {app_name}/{user_id}/{session_id}/
+                    # 1. Delete events file under sessions/{session_id}/
+                    events_prefix = f"sessions/{session_id}/"
+                    events_blobs = list(bucket.list_blobs(prefix=events_prefix))
+                    if events_blobs:
+                        bucket.delete_blobs(events_blobs)
+                        logger.info("Purged %d GCS events files for session %s", len(events_blobs), session_id)
+                        
+                    # 2. GcsArtifactService formats GCS blob paths like: {app_name}/{user_id}/{session_id}/
                     prefix = f"{app_name}/{user_id}/{session_id}/"
                     blobs = list(bucket.list_blobs(prefix=prefix))
                     if blobs:
