@@ -10,6 +10,17 @@ let isAdmin = false;
 
 // Initialize
 document.addEventListener("DOMContentLoaded", async () => {
+    // Detect environment and set runtime selector
+    const hostname = window.location.hostname;
+    const runtimeModeSelect = document.getElementById("runtime-mode");
+    if (runtimeModeSelect) {
+        if (hostname !== "localhost" && hostname !== "127.0.0.1") {
+            runtimeModeSelect.value = "deployed";
+            runtimeModeSelect.disabled = true; // Lock to deployed in cloud deployment
+        } else {
+            runtimeModeSelect.value = "local";
+        }
+    }
     setupEventListeners();
     await checkAuth();
 });
