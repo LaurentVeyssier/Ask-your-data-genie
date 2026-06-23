@@ -136,6 +136,91 @@ uv run pytest
 
 ---
 
+## 📊 Systematic Agent Evaluation
+
+The application includes a systematic evaluation suite built using the **ADK (Agent Development Kit)** CLI (`agents-cli`). While standard integration tests assert API and route logic, the evaluation suite measures the actual *behavior* of the AI Data Analyst agent (its code execution logic, Plotly visualization generation, response quality, and guardrails).
+
+### 1. Understanding the Dataset
+Evaluation cases are located in [tests/eval/datasets/basic-dataset.json](tests/eval/datasets/basic-dataset.json). It currently defines four distinct scenarios testing different aspects of the agent:
+- **`greeting`**: Tests if the agent introduces its capabilities properly.
+- **`weather_query`**: Tests agent guardrails—verifying it declines live real-time queries and suggests analyzing uploaded data instead.
+- **`data_analysis_summary`**: Tests pandas code execution by asking the agent to read [eval_data.csv](eval_data.csv) and compute total sales per category.
+- **`data_analysis_plot`**: Tests Plotly generation by asking the agent to generate and write a categorized sales bar chart to `plotly_chart.json`.
+
+### 2. Evaluation Requirements & Vertex AI
+Running evaluations requires the enterprise Vertex AI backend (`GOOGLE_GENAI_USE_VERTEXAI=True`) and Application Default Credentials (ADC) for the following reasons:
+- **API Key Quota Limits**: The Gemini Developer API (AI Studio) Free Tier enforces a strict quota of **20 requests per day** for models. The multiple model calls required to run the agent plus the LLM-as-Judge evaluations will quickly exhaust this limit. Vertex AI provides much higher limits suitable for testing loops.
+- **Region Routing**: Configured as `region: "global"` in [agents-cli-manifest.yaml](agents-cli-manifest.yaml) to ensure Vertex AI routes request parameters to the global routing gateway where the agent's default `gemini-3.5-flash` model is fully available.
+- **Environment Key Conflicts**: If `GOOGLE_API_KEY` or `GEMINI_API_KEY` is present in your shell environment, the Google GenAI SDK will try to authenticate using API keys, causing `401 UNAUTHENTICATED` errors on Vertex AI. The app automatically cleanses these conflicting environment variables at runtime to ensure ADC is utilized.
+
+Before running evaluations, ensure you are authenticated locally on your host:
+```bash
+gcloud auth application-default login
+```
+
+### 3. Evaluation Procedure
+To run the full evaluation loop (inference + grading) in a single command, run:
+```bash
+agents-cli eval run --dataset tests/eval/datasets/basic-dataset.json --config tests/eval/eval_config.yaml
+```
+
+Alternatively, you can run them as two discrete steps:
+1. **Generate Traces**: Execute the agent over the dataset and record action traces (e.g. executed code and intermediate events):
+   ```bash
+   agents-cli eval generate --dataset tests/eval/datasets/basic-dataset.json
+   ```
+   Traces are saved locally in the `artifacts/traces/` directory.
+2. **Grade Traces**: Run the LLM-as-Judge evaluation on the traces:
+   ```bash
+   agents-cli eval grade --config tests/eval/eval_config.yaml
+   ```
+   Results are saved as JSON and HTML files in `artifacts/grade_results/` (e.g., `results_<timestamp>.html`).
+
+You can compare current results against a baseline to check for regressions:
+```bash
+agents-cli eval compare artifacts/grade_results/baseline.json artifacts/grade_results/results_<ts>.json
+```
+
+### 4. How to Extend the Evaluation Test Set
+
+#### A. Add New Test Cases
+To add a new scenario, append a case object to the `eval_cases` array in [basic-dataset.json](tests/eval/datasets/basic-dataset.json):
+```json
+{
+  "eval_case_id": "your_custom_scenario",
+  "prompt": {
+    "role": "user",
+    "parts": [{"text": "Read eval_data.csv. Calculate the average sales."}]
+  }
+}
+```
+
+#### B. Defining Custom Evaluation Criteria
+Evaluations are graded using custom LLM-as-judge metrics defined in [eval_config.yaml](tests/eval/eval_config.yaml).
+
+Custom criteria are written as Python functions in the config file. For example, our `custom_response_quality` metric parses the trace, extracts the prompt and the agent's final text response, and formats a detailed grading prompt for a judge model (`gemini-3.5-flash-lite`):
+```yaml
+custom_metrics:
+  - name: custom_response_quality
+    custom_function: |
+      def evaluate(instance):
+          # Extract prompt & final response from the agent_data trace
+          # ...
+          judge_prompt = """Evaluate the agent's response from 1 to 5:
+          1 (Poor): Fails to address the query.
+          5 (Excellent): Comprehensive and flawlessly accurate.
+          
+          User Prompt: {prompt}
+          Final Response: {final_resp}
+          Return JSON: {"score": <int>, "explanation": "<str>"}
+          """
+          # Invoke client.models.generate_content to score the response
+          # Return {"score": score, "explanation": explanation}
+```
+You can add more custom metrics under the `custom_metrics` key and list them under `metrics_to_run` to run them during evaluation.
+
+---
+
 ## ☁️ Deployment
 
 Deploy the application to Google Cloud Run:
