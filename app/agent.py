@@ -46,6 +46,8 @@ use_vertex = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", os.getenv("GOOGLE_GENAI_USE_
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = use_vertex
 os.environ["GOOGLE_GENAI_USE_ENTERPRISE"] = use_vertex
 
+# Avoid conflict between Vertex AI and Gemini API Key
+# Force client to use Application Default Credentials (ADC) when backend switched to Enterprise Vertex AI
 if use_vertex == "True":
     os.environ.pop("GOOGLE_API_KEY", None)
     os.environ.pop("GEMINI_API_KEY", None)
