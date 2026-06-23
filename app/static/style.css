@@ -1532,6 +1532,11 @@ body {
         gap: 0.5rem;
     }
 
+    .header-controls span,
+    .logo-text span {
+        display: none !important;
+    }
+
     /* Workspace layout changes */
     .app-workspace {
         flex-direction: column;
