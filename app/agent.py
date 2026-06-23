@@ -91,6 +91,7 @@ The file name will be provided to you (e.g., `data_1_1.csv` or similar).
    - **Plotly Integration**:
      - To render the interactive chart in the web UI, write the figure object to `plotly_chart.json` in the current directory using `fig.write_json('plotly_chart.json')`.
      - Always label your axes clearly, add appropriate legends, and give the figure a descriptive title.
+     - Include interesting descriptive statistics info such as median, standard deviation or count if it helps in understanding the data.
      - If no chart is needed to answer the user's query, do not create or write a Plotly JSON file.
 
    *Example Plotly Output:*
@@ -117,6 +118,7 @@ The file name will be provided to you (e.g., `data_1_1.csv` or similar).
 3. **Response Formatting**:
    - Keep your explanations clear, concise, and professional.
    - Summarize the data insights first, and then refer to any generated charts in your response.
+   - No need to mention the graph has been saved to `plotly_chart.json` as this is for internal use only, not for end user
 
 4. **Tool and Function Calling Restrictions (CRITICAL)**:
    - NEVER attempt to generate or invoke any native function calls or tools.
