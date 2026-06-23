@@ -12,17 +12,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM python:3.12-slim
+# Stage 1: Build virtual environment
+FROM python:3.12-slim AS builder
 
+# Install uv package manager
 RUN pip install --no-cache-dir uv==0.8.13
 
 WORKDIR /code
 
-COPY ./pyproject.toml ./README.md ./uv.lock* ./
+# Copy package config files
+COPY ./pyproject.toml ./uv.lock* ./README.md ./
 
+# Sync dependencies (excluding dev tools)
+RUN uv sync --frozen --no-dev --no-editable
+
+# Stage 2: Final minimal runtime image
+FROM python:3.12-slim AS runner
+
+WORKDIR /code
+
+# Copy the virtual environment from the builder stage
+COPY --from=builder /code/.venv /code/.venv
+
+# Copy the application source code
 COPY ./app ./app
 
-RUN uv sync --frozen
+# Add virtual environment to PATH
+ENV PATH="/code/.venv/bin:$PATH"
 
 ARG COMMIT_SHA=""
 ENV COMMIT_SHA=${COMMIT_SHA}
@@ -32,4 +48,5 @@ ENV AGENT_VERSION=${AGENT_VERSION}
 
 EXPOSE 8080
 
-CMD ["uv", "run", "uvicorn", "app.fast_api_app:app", "--host", "0.0.0.0", "--port", "8080"]
+# Run uvicorn directly from the virtual environment
+CMD ["uvicorn", "app.fast_api_app:app", "--host", "0.0.0.0", "--port", "8080"]
