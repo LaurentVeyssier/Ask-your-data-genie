@@ -43,6 +43,7 @@ jobs:
     # authorized user to approve it before proceeding.
     environment:
       name: production
+      url: ${{ steps.fetch-url.outputs.prod_url }}
     concurrency: production
     permissions:
       contents: 'read'
@@ -92,4 +93,12 @@ jobs:
             --project ${{ vars.PROD_PROJECT_ID }} \
             --region ${{ vars.REGION }} \
             --image ${{ vars.REGION }}-docker.pkg.dev/${{ vars.CICD_PROJECT_ID }}/${{ vars.ARTIFACT_REGISTRY_REPO_NAME }}/${{ vars.CONTAINER_NAME }}:${{ github.sha }}
+
+      - name: Fetch Production Service URL
+        id: fetch-url
+        run: |
+          _PROD_URL=$(gcloud run services describe ${{ vars.CONTAINER_NAME }} \
+            --region ${{ vars.REGION }} --project ${{ vars.PROD_PROJECT_ID }} --format="value(status.url)")
+          echo "prod_url=${_PROD_URL}" >> $GITHUB_OUTPUT
+
 

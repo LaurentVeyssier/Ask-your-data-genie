@@ -1,5 +1,7 @@
 # Ask-Your-Data Analyst Genie 📊🤖
 
+[![Deploy to Production](https://github.com/LaurentVeyssier/Ask-your-data-genie/actions/workflows/deploy-to-prod.yaml/badge.svg)](https://github.com/LaurentVeyssier/Ask-your-data-genie/actions/workflows/deploy-to-prod.yaml)
+
 An intelligent, secure, and feature-rich data analysis web application powered by a Gemini ReAct agent. Users can upload CSV files, perform complex mathematical or statistical operations, generate premium interactive Plotly visualizations, and chat with their files in natural language.
 
 The application implements full user authentication (email + password), persistent multi-device sessions, automatic GCS/Firestore cleanups, and a glassmorphic Administrative Control Panel for user and system management.
