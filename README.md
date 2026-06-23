@@ -347,6 +347,48 @@ You can add more custom metrics under the `custom_metrics` key and list them und
 
 ---
 
+## 🔍 Observability & Local Cloud Tracing
+
+The application features built-in distributed tracing using OpenTelemetry (OTel), which exports request traces, agent executions, and model calls to **Google Cloud Trace (Trace Explorer)**.
+
+### 1. How Traces work
+When you interact with the agent, the backend generates a hierarchy of spans:
+* `fast_api_request` (The root HTTP request)
+* `agent_run` (The ADK agent logic)
+  * `call_llm` (Gemini API prompts and completions)
+  * `execute_tool` (Python sandbox execution steps)
+
+### 2. How to Enable and Test Tracing Locally
+
+You can route traces from your local environment (host execution or container) to your Google Cloud Trace Explorer before deploying:
+
+#### Prerequisites
+1. **Enable the Cloud Trace API** in your GCP project console or via terminal:
+   ```bash
+   gcloud services enable cloudtrace.googleapis.com --project your-gcp-project-id
+   ```
+2. **Generate Application Default Credentials (ADC)** on your local machine:
+   ```bash
+   gcloud auth application-default login
+   ```
+
+#### Configuration
+Set the following variables in your `.env` file:
+```env
+GOOGLE_CLOUD_PROJECT=your-gcp-project-id
+ENABLE_CLOUD_TRACE=True
+```
+
+#### Running & Verification
+1. Spin up the application (either standard `uv run uvicorn...` or containerized `docker compose up --build`).
+2. Ask the agent a question in the chat UI.
+3. Open the **[Google Cloud Console Trace Explorer](https://console.cloud.google.com/trace/traces)**.
+4. Select your project (`GOOGLE_CLOUD_PROJECT`) and you will see waterfall latency/execution charts for every local run, letting you debug bottlenecks or tool failures in real-time.
+
+To temporarily turn off local tracing to the cloud, set `ENABLE_CLOUD_TRACE=False` in your `.env`.
+
+---
+
 ## ☁️ Deployment
 
 Deploy the application to Google Cloud Run:

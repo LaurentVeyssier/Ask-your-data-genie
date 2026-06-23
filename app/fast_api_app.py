@@ -88,13 +88,14 @@ session_service_uri = None
 artifact_service_uri = f"gs://{logs_bucket_name}" if logs_bucket_name else None
 
 # Initialize the default ADK Fast API app
+enable_cloud_trace = os.environ.get("ENABLE_CLOUD_TRACE", "True").lower() == "true"
 app: FastAPI = get_fast_api_app(
     agents_dir=AGENT_DIR,
     web=False,
     artifact_service_uri=artifact_service_uri,
     allow_origins=allow_origins,
     session_service_uri=session_service_uri,
-    otel_to_cloud=True,
+    otel_to_cloud=enable_cloud_trace,
 )
 app.title = "ask-your-data"
 app.description = "API for interacting with the Agent ask-your-data"
