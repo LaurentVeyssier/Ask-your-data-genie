@@ -14,3 +14,8 @@ GEMINI.md
 **/*.pyd
 .DS_Store
 Thumbs.db
+.env
+local_users.db
+eval_data.csv
+.pytest_cache
+artifacts

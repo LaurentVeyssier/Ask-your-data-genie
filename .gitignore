@@ -206,3 +206,6 @@ tools/a2a-inspector/
 
 # Scratch files
 scratch/
+
+# Evaluation artifacts
+artifacts/
