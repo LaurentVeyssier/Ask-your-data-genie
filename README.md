@@ -43,7 +43,8 @@ ask-your-data/
 │   ├── app_utils/           # Helpers and database models
 │   │   ├── auth_service.py      # BCrypt hashing, JWTs, SQLite/Firestore UserStore
 │   │   ├── firestore_session.py # Firestore session engine & GCS purging
-│   │   └── telemetry.py         # Google Cloud Trace and metrics setup
+│   │   ├── telemetry.py         # Google Cloud Trace and metrics setup
+│   │   └── typing.py            # Pydantic telemetry & feedback schemas
 │   ├── static/              # Frontend web application assets
 │   │   ├── app.js               # UI controller, Plotly renderer, Admin API clients
 │   │   ├── index.html           # Glassmorphic layout, chat panels, admin portal
@@ -52,9 +53,16 @@ ask-your-data/
 │   ├── fast_api_app.py      # FastAPI routing, security dependencies, and admin endpoints
 │   └── local_executor.py    # Python code execution sandbox
 ├── tests/                   # Automated validation suite
+│   ├── eval/                # Systematic evaluation suite (ADK)
+│   │   ├── datasets/            # Target evaluation JSON datasets
+│   │   └── eval_config.yaml     # Custom LLM-as-judge metrics & run settings
 │   ├── integration/         # Server and Agent end-to-end tests
 │   └── unit/                # Core unit logic tests
 ├── .env.example             # Template for developer configuration
+├── agents-cli-manifest.yaml # ADK settings for evaluation and deployment
+├── Dockerfile               # Build configuration for containerization
+├── docker-compose.yml       # Host-container port and volume mappings
+├── eval_data.csv            # Sample database for testing data analysis
 ├── pyproject.toml           # Package declarations and dependencies
 └── GEMINI.md                # Development workflows
 ```
