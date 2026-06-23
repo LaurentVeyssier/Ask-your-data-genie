@@ -22,6 +22,9 @@
         <!-- Top Navigation -->
         <header class="app-header">
             <div class="header-logo">
+                <button id="sidebar-toggle-btn" class="sidebar-toggle-btn" title="Toggle Sidebar">
+                    <i class="fa-solid fa-bars"></i>
+                </button>
                 <i class="fa-solid fa-chart-pie logo-icon"></i>
                 <div class="logo-text">
                     <h1>AskYourData</h1>
@@ -53,6 +56,17 @@
 
         <!-- Main Workspace -->
         <main class="app-workspace">
+            <!-- Mobile Workspace Tabs -->
+            <div class="mobile-workspace-tabs" id="mobile-workspace-tabs">
+                <button class="mobile-tab-btn active" data-workspace-tab="chat">
+                    <i class="fa-solid fa-comments"></i> Chat
+                </button>
+                <button class="mobile-tab-btn" data-workspace-tab="viz">
+                    <i class="fa-solid fa-chart-line"></i> Dashboard
+                    <span id="viz-dot" class="viz-dot hidden"></span>
+                </button>
+            </div>
+
             <!-- Left Sidebar: Session History -->
             <section class="workspace-sidebar" id="sidebar">
                 <div class="sidebar-header">
@@ -283,6 +297,9 @@
             </div>
         </div>
     </div>
+
+    <!-- Sidebar Overlay for Mobile -->
+    <div id="sidebar-overlay" class="sidebar-overlay hidden"></div>
 
     <script src="/static/app.js"></script>
 </body>

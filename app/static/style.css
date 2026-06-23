@@ -1391,3 +1391,203 @@ body {
     border-color: rgba(139, 92, 246, 0.5) !important;
     box-shadow: 0 0 12px rgba(139, 92, 246, 0.2);
 }
+
+/* ==============================================================================
+   RESPONSIVE DESIGN ADDITIONS
+   ============================================================================== */
+
+/* Sidebar Hamburger Toggle Button (Hidden on Desktop) */
+.sidebar-toggle-btn {
+    display: none;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+    padding: 0.4rem;
+    border-radius: 6px;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    margin-right: 0.25rem;
+}
+
+.sidebar-toggle-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--text-secondary);
+}
+
+/* Mobile Workspace Tabs (Hidden on Desktop) */
+.mobile-workspace-tabs {
+    display: none;
+    background: rgba(13, 17, 30, 0.95);
+    border-bottom: 1px solid var(--border-color);
+    width: 100%;
+    padding: 0.5rem 1rem;
+    justify-content: center;
+    gap: 0.75rem;
+    backdrop-filter: blur(12px);
+    z-index: 5;
+}
+
+.mobile-tab-btn {
+    flex: 1;
+    max-width: 160px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-family: var(--font-sans);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.mobile-tab-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.mobile-tab-btn.active {
+    color: white;
+    background: rgba(99, 102, 241, 0.15);
+    border-color: rgba(99, 102, 241, 0.35);
+    box-shadow: 0 0 12px var(--border-glow);
+}
+
+/* Active indicator dot for new viz output */
+.viz-dot {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    width: 8px;
+    height: 8px;
+    background-color: var(--accent-cyan);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--accent-cyan);
+    animation: pulseGlow 1.5s infinite;
+}
+
+@keyframes pulseGlow {
+    0% { transform: scale(0.9); opacity: 0.6; }
+    50% { transform: scale(1.2); opacity: 1; }
+    100% { transform: scale(0.9); opacity: 0.6; }
+}
+
+/* Sidebar Drawer Backdrop Overlay */
+.sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    z-index: 990;
+    transition: opacity 0.3s ease;
+}
+
+.sidebar-overlay.hidden {
+    display: none !important;
+}
+
+/* Mobile and Tablet Media Query */
+@media (max-width: 800px) {
+    /* Header layout changes */
+    .app-header {
+        padding: 0.75rem 1rem;
+    }
+    
+    .sidebar-toggle-btn {
+        display: flex; /* Show toggle button */
+    }
+
+    .runtime-selector {
+        display: none !important; /* Hide runtime selector to save space */
+    }
+
+    .session-badge {
+        display: none !important; /* Hide session fingerprint */
+    }
+    
+    .user-profile {
+        padding: 0.35rem 0.5rem;
+        font-size: 0.75rem;
+    }
+    
+    .header-btn {
+        padding: 0.35rem 0.5rem;
+        font-size: 0.75rem;
+    }
+
+    .header-controls {
+        gap: 0.5rem;
+    }
+
+    /* Workspace layout changes */
+    .app-workspace {
+        flex-direction: column;
+        position: relative;
+    }
+
+    /* Tabs become visible */
+    .mobile-workspace-tabs {
+        display: flex;
+    }
+
+    /* Sidebar becomes a sliding drawer */
+    .workspace-sidebar {
+        position: fixed;
+        left: -280px; /* Hidden offscreen by default */
+        top: 0;
+        bottom: 0;
+        width: 260px;
+        z-index: 1000;
+        transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 10px 0 30px rgba(0,0,0,0.5);
+        background-color: var(--bg-main);
+    }
+
+    .workspace-sidebar.open {
+        left: 0; /* Slide in */
+    }
+
+    /* Panel layout toggle based on active tab */
+    .workspace-panel {
+        width: 100% !important;
+        min-width: 0 !important;
+        flex: 1 !important;
+    }
+
+    /* Hide panels that are not currently active */
+    .app-workspace:not(.tab-viz-active) .viz-panel {
+        display: none !important;
+    }
+
+    .app-workspace.tab-viz-active .chat-panel {
+        display: none !important;
+    }
+
+    /* Adjust padding for inner containers */
+    .chat-history {
+        padding: 1rem;
+    }
+
+    .viz-panel {
+        padding: 1rem;
+    }
+    
+    /* Modals become slightly narrower for padding */
+    .auth-modal-card {
+        padding: 1.75rem;
+        width: 92%;
+    }
+}

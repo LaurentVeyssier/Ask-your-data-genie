@@ -204,6 +204,14 @@ async function selectSession(id) {
     sessionId = id;
     document.getElementById("session-id-display").textContent = sessionId;
 
+    // Close sidebar on mobile after selecting a session
+    const sidebar = document.getElementById("sidebar");
+    const sidebarOverlay = document.getElementById("sidebar-overlay");
+    if (sidebar && sidebar.classList.contains("open")) {
+        sidebar.classList.remove("open");
+        if (sidebarOverlay) sidebarOverlay.classList.add("hidden");
+    }
+
     // Highlight active session in list
     const items = document.querySelectorAll(".session-item");
     items.forEach(item => {
@@ -553,6 +561,53 @@ function setupEventListeners() {
     if (cleanupBtn) {
         cleanupBtn.addEventListener("click", triggerManualCleanup);
     }
+
+    // --- Mobile Responsive Events ---
+    // 1. Sidebar Drawer Toggle
+    const sidebarToggleBtn = document.getElementById("sidebar-toggle-btn");
+    const sidebar = document.getElementById("sidebar");
+    const sidebarOverlay = document.getElementById("sidebar-overlay");
+
+    if (sidebarToggleBtn && sidebar && sidebarOverlay) {
+        sidebarToggleBtn.addEventListener("click", () => {
+            sidebar.classList.toggle("open");
+            sidebarOverlay.classList.toggle("hidden");
+        });
+
+        sidebarOverlay.addEventListener("click", () => {
+            sidebar.classList.remove("open");
+            sidebarOverlay.classList.add("hidden");
+        });
+    }
+
+    // 2. Mobile Workspace Tabs Switching (Chat vs Dashboard)
+    const mobileWorkspaceTabs = document.querySelectorAll(".mobile-tab-btn");
+    const workspace = document.querySelector(".app-workspace");
+    const vizDot = document.getElementById("viz-dot");
+
+    mobileWorkspaceTabs.forEach(btn => {
+        btn.addEventListener("click", () => {
+            const tab = btn.getAttribute("data-workspace-tab");
+
+            // Toggle active status on tab buttons
+            mobileWorkspaceTabs.forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+
+            // Toggle workspace layout layout class
+            if (tab === "viz") {
+                workspace.classList.add("tab-viz-active");
+                if (vizDot) vizDot.classList.add("hidden"); // Clear notification dot
+
+                // Trigger Plotly chart resize to adapt to container layout width
+                const chartDiv = document.getElementById("plotly-chart");
+                if (chartDiv && !chartDiv.classList.contains("hidden")) {
+                    Plotly.Plots.resize(chartDiv);
+                }
+            } else {
+                workspace.classList.remove("tab-viz-active");
+            }
+        });
+    });
 }
 
 // Enable/Disable Send Button
@@ -961,6 +1016,14 @@ async function fetchAndRenderChart(sessId, filename) {
         
         // Resize layout slightly to fit panel
         Plotly.Plots.resize("plotly-chart");
+
+        // If on mobile and dashboard tab is not active, display notification dot
+        const vizTabBtn = document.querySelector('[data-workspace-tab="viz"]');
+        const workspace = document.querySelector(".app-workspace");
+        if (vizTabBtn && workspace && !workspace.classList.contains("tab-viz-active")) {
+            const vizDot = document.getElementById("viz-dot");
+            if (vizDot) vizDot.classList.remove("hidden");
+        }
     } catch (err) {
         console.error("Error rendering Plotly chart:", err);
     }
