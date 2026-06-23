@@ -53,9 +53,15 @@ class FirestoreSessionService(BaseSessionService):
             session: The Session instance to save.
         """
         doc_ref = self.db.collection(self.collection_name).document(session.id)
-        # Using model_dump_json() ensures all nested fields serialize perfectly to JSON.
-        # This bypasses Firestore type matching constraints for complex objects.
-        session_json = session.model_dump_json()
+        
+        # Save events list separately to prevent exceeding Firestore's 1MB document limit
+        events = session.events
+        session.events = []
+        try:
+            session_json = session.model_dump_json()
+        finally:
+            session.events = events
+
         await doc_ref.set({
             "id": session.id,
             "app_name": session.app_name,
@@ -63,6 +69,15 @@ class FirestoreSessionService(BaseSessionService):
             "last_update_time": session.last_update_time,
             "session_json": session_json
         })
+
+        # Save each event to the events subcollection
+        for idx, event in enumerate(events):
+            event_ref = doc_ref.collection("events").document(str(idx))
+            await event_ref.set({
+                "event_json": event.model_dump_json(),
+                "timestamp": event.timestamp,
+                "idx": idx
+            })
 
     async def create_session(
         self,
@@ -139,6 +154,25 @@ class FirestoreSessionService(BaseSessionService):
             logger.error("Failed to validate Session JSON for %s: %s", session_id, e)
             return None
 
+        # Load events list from subcollection
+        try:
+            events_ref = doc_ref.collection("events").order_by("idx")
+            events_docs = events_ref.stream()
+            events = []
+            async for event_doc in events_docs:
+                event_data = event_doc.to_dict()
+                if event_data and "event_json" in event_data:
+                    events.append(Event.model_validate_json(event_data["event_json"]))
+            
+            # Fallback: only overwrite session.events if subcollection has events,
+            # or if the subcollection is empty but the deserialized session also has no events.
+            # (Maintains compatibility with legacy single-document sessions).
+            if events or not session.events:
+                session.events = events
+        except Exception as e:
+            logger.error("Failed to load events subcollection for %s: %s", session_id, e)
+            return None
+
         # Filter events if config is provided
         if config:
             if config.num_recent_events is not None:
@@ -194,8 +228,13 @@ class FirestoreSessionService(BaseSessionService):
             user_id: The user ID.
             session_id: The session ID.
         """
-        # Delete Firestore document
+        # Delete Firestore document and its events subcollection
         doc_ref = self.db.collection(self.collection_name).document(session_id)
+        try:
+            async for event_doc in doc_ref.collection("events").stream():
+                await event_doc.reference.delete()
+        except Exception as e:
+            logger.error("Failed to delete events subcollection for %s: %s", session_id, e)
         await doc_ref.delete()
 
         # Delete GCS artifacts
