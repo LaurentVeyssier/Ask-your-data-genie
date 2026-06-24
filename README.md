@@ -15,7 +15,7 @@ The application implements full user authentication (email + password), persiste
 ### 1. 🤖 ReAct Analyst Agent
 - **Powered by GenAI SDK**: Implements the modern `google-genai` client for prompt processing and tools invocation.
 - **Secure Sandbox Execution**: Executes generated Python code inside a localized, secure sandbox (`FileSavingLocalCodeExecutor`).
-- **Automated Data Profiling (ADK Pre-processing)**: When a new CSV file is uploaded, the ADK framework automatically triggers an exploration step before the agent begins reasoning. It runs an isolated python script (`explore_df`) in the sandbox to extract the data schema, column types, row counts, and preview unique values. This context is automatically injected into the LLM prompt context, allowing the agent to plan and write code correctly on the very first turn.
+- **Automated Data Profiling (ADK Pre-processing)**: When a new CSV file is uploaded, the ADK framework automatically triggers an exploration step before the agent begins reasoning. It runs an isolated python script (`explore_df`) in the sandbox to extract the data schema, column types, row counts, and preview unique values. This context is automatically injected into the LLM prompt context, allowing the agent to plan and write code correctly on the very first turn. For subsequent messages, profiling results are cached and retrieved from the persistent session state, skipping re-execution and immediately injecting the context without any extra LLM calls.
 - **Interactive Visualizations**: Generates rich dynamic graphics, exporting output directly as interactive [Plotly](https://plotly.com/javascript/) charts rendered seamlessly on the frontend.
 
 ### 2. 🔐 User Authentication & Security
