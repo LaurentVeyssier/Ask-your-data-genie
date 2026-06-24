@@ -14,7 +14,7 @@ The application implements full user authentication (email + password), persiste
 
 ### 1. 🤖 ReAct Analyst Agent
 - **Powered by GenAI SDK**: Implements the modern `google-genai` client for prompt processing and tools invocation.
-- **Secure Sandbox Execution**: Executes generated Python code inside a localized, secure sandbox (`FileSavingLocalCodeExecutor`).
+- **Isolated Subprocess Code Execution**: Executes generated Python code in a separate `spawn` process (via [FileSavingLocalCodeExecutor](app/local_executor.py#L73)), capturing stdout and generated file artifacts (like Plotly figures) dynamically. System-level sandbox isolation is offloaded to the container layer (Docker/Cloud Run).
 - **Automated Data Profiling (ADK Pre-processing)**: When a new CSV file is uploaded, the ADK framework automatically triggers an exploration step before the agent begins reasoning. It runs an isolated python script (`explore_df`) in the sandbox to extract the data schema, column types, row counts, and preview unique values. This context is automatically injected into the LLM prompt context, allowing the agent to plan and write code correctly on the very first turn.
   - **Session-Scoped Caching**: Within the same conversation thread, profiling results are saved in the persistent session state (even across logouts and logins). Subsequent messages instantly reuse this context, bypassing re-execution and eliminating extra LLM queries.
   - **New Session Separation**: For data privacy and security, starting a new chat thread (session) initializes a clean slate. Uploading the same file in a new thread will trigger a one-time profile run to initialize that session's isolated cache.
@@ -477,12 +477,12 @@ The application’s codebase incorporates several design decisions inspired dire
 #### A. CSV Pre-processing and Automated Profiling (`optimize_data_file`)
 *   **Skill Reference**: `google-agents-cli-adk-code` & `google-agents-cli-workflow`
 *   **Implementation**: In [FileSavingLocalCodeExecutor](app/local_executor.py#L73), we set the property `optimize_data_file = True`.
-*   **How it Works**: When a new CSV file is uploaded, the ADK framework intercepts the request and automatically triggers a localized profiling script (`explore_df`) in the sandbox before the first LLM request. It runs pandas inspection operations (schema, column types, row counts, unique value samples) and injects this structure directly into the model's system context. This allows the Gemini model to write syntactically correct code blocks on the very first turn without having to query the file structure manually, saving round-trip latencies.
-*   **Caching & Separation**: Within a session, profiling is run exactly once and cached inside [FirestoreSessionService](app/app_utils/firestore_session.py#L31)'s `_code_executor_input_files`. Submissions in a new session or thread enforce isolated sandboxes, triggering a fresh profiling run for data privacy.
+*   **How it Works**: When a new CSV file is uploaded, the ADK framework intercepts the request and automatically triggers a localized profiling script (`explore_df`) in the executor environment before the first LLM request. It runs pandas inspection operations (schema, column types, row counts, unique value samples) and injects this structure directly into the model's system context. This allows the Gemini model to write syntactically correct code blocks on the very first turn without having to query the file structure manually, saving round-trip latencies.
+*   **Caching & Separation**: Within a session, profiling is run exactly once and cached inside [FirestoreSessionService](app/app_utils/firestore_session.py#L31)'s `_code_executor_input_files`. Submissions in a new session or thread enforce isolated directory states, triggering a fresh profiling run for data privacy.
 
-#### B. Secure Sandbox Execution
+#### B. Isolated Execution & Containerized Sandboxing
 *   **Skill Reference**: `google-agents-cli-adk-code`
-*   **Implementation**: Standard local executors can risk host system corruption when executing AI-generated python scripts. We implemented [FileSavingLocalCodeExecutor](app/local_executor.py#L73) using a separate Python `spawn` process context, redirecting `stdout` and capturing files generated in the workspace (like interactive Plotly figures) securely.
+*   **Implementation**: To support Plotly graphics generation and local file outputs, we bypassed ADK's restricted `BuiltInCodeExecutor` in favor of a custom [FileSavingLocalCodeExecutor](app/local_executor.py#L73). This executor executes code in a separate Python `spawn` process context on the server, redirecting `stdout` and capturing newly generated workspace files. Because a subprocess itself does not prevent malicious actions on the host, **sandbox security is achieved at the containerization layer** (using Docker for local runs, and Google Cloud Run for production) to fully isolate and protect host systems.
 
 #### C. Sanitize and Align LLM Request History
 *   **Skill Reference**: `google-agents-cli-adk-code`
