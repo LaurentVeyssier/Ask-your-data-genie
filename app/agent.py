@@ -52,11 +52,12 @@ if use_vertex == "True":
     os.environ.pop("GOOGLE_API_KEY", None)
     os.environ.pop("GEMINI_API_KEY", None)
 else:
-    # Cleanse trailing newlines or whitespaces from API keys (common copy-paste side effect in Secret Manager)
+    # Cleanse trailing newlines, whitespaces, and Byte Order Marks (\ufeff) from API keys (common side effect in GCP Secret Manager from Windows files)
     if "GEMINI_API_KEY" in os.environ:
-        os.environ["GEMINI_API_KEY"] = os.environ["GEMINI_API_KEY"].strip()
+        os.environ["GEMINI_API_KEY"] = os.environ["GEMINI_API_KEY"].strip().lstrip('\ufeff')
     if "GOOGLE_API_KEY" in os.environ:
-        os.environ["GOOGLE_API_KEY"] = os.environ["GOOGLE_API_KEY"].strip()
+        os.environ["GOOGLE_API_KEY"] = os.environ["GOOGLE_API_KEY"].strip().lstrip('\ufeff')
+
 
 
 # System instruction guiding the model on how to write code and generate Plotly charts
