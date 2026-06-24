@@ -51,6 +51,13 @@ os.environ["GOOGLE_GENAI_USE_ENTERPRISE"] = use_vertex
 if use_vertex == "True":
     os.environ.pop("GOOGLE_API_KEY", None)
     os.environ.pop("GEMINI_API_KEY", None)
+else:
+    # Cleanse trailing newlines or whitespaces from API keys (common copy-paste side effect in Secret Manager)
+    if "GEMINI_API_KEY" in os.environ:
+        os.environ["GEMINI_API_KEY"] = os.environ["GEMINI_API_KEY"].strip()
+    if "GOOGLE_API_KEY" in os.environ:
+        os.environ["GOOGLE_API_KEY"] = os.environ["GOOGLE_API_KEY"].strip()
+
 
 # System instruction guiding the model on how to write code and generate Plotly charts
 SYSTEM_INSTRUCTION: str = """You are a highly capable Data Science AI Assistant.
