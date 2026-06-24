@@ -100,6 +100,73 @@ class FirestoreSessionService(BaseSessionService):
             logger.error("Failed to load events from GCS for %s: %s", session_id, e)
             return None
 
+    async def _save_state_keys(self, session_id: str, large_state: dict[str, Any]) -> None:
+        """Saves large state keys to GCS or Firestore subcollection.
+
+        Args:
+            session_id: The session ID.
+            large_state: The dictionary of large state keys.
+        """
+        if self.bucket_name:
+            state_json = json.dumps(large_state)
+            def _upload():
+                client = storage.Client()
+                bucket = client.bucket(self.bucket_name)
+                blob_path = f"sessions/{session_id}/state_large.json"
+                blob = bucket.blob(blob_path)
+                blob.upload_from_string(state_json, content_type="application/json")
+                logger.info("Saved large state keys to GCS path %s", blob_path)
+            await asyncio.to_thread(_upload)
+        else:
+            doc_ref = self.db.collection(self.collection_name).document(session_id)
+            for key, val in large_state.items():
+                key_ref = doc_ref.collection("state_large").document(key)
+                await key_ref.set({
+                    "val_json": json.dumps(val)
+                })
+
+    async def _load_state_keys(self, session_id: str) -> dict[str, Any]:
+        """Loads large state keys from GCS or Firestore subcollection.
+
+        Args:
+            session_id: The session ID.
+
+        Returns:
+            A dictionary containing the large state keys.
+        """
+        large_state = {}
+        if self.bucket_name:
+            def _download():
+                client = storage.Client()
+                bucket = client.bucket(self.bucket_name)
+                blob_path = f"sessions/{session_id}/state_large.json"
+                blob = bucket.blob(blob_path)
+                if not blob.exists():
+                    return None
+                return blob.download_as_text()
+            try:
+                state_str = await asyncio.to_thread(_download)
+                if state_str:
+                    parsed = json.loads(state_str)
+                    if isinstance(parsed, dict):
+                        large_state = parsed
+            except Exception as e:
+                logger.error("Failed to load large state from GCS for %s: %s", session_id, e)
+        else:
+            try:
+                doc_ref = self.db.collection(self.collection_name).document(session_id)
+                docs = doc_ref.collection("state_large").stream()
+                async for doc in docs:
+                    data = doc.to_dict()
+                    if data and "val_json" in data:
+                        try:
+                            large_state[doc.id] = json.loads(data["val_json"])
+                        except Exception:
+                            pass
+            except Exception as e:
+                logger.error("Failed to load large state from Firestore subcollection for %s: %s", session_id, e)
+        return large_state
+
     async def _save_session(self, session: Session) -> None:
         """Serializes and writes the Session object to Firestore.
 
@@ -111,10 +178,21 @@ class FirestoreSessionService(BaseSessionService):
         # Save events list separately to prevent exceeding Firestore's 1MB document limit
         events = session.events
         session.events = []
+        
+        # Extract large state keys to store separately (avoids Firestore's 1MB limit for CSV uploads in state)
+        large_state = {}
+        large_keys = ["_code_executor_input_files", "_code_execution_results"]
+        for key in large_keys:
+            if key in session.state:
+                large_state[key] = session.state.pop(key)
+
         try:
             session_json = session.model_dump_json()
         finally:
+            # Restore events and state on the in-memory object
             session.events = events
+            for key, val in large_state.items():
+                session.state[key] = val
 
         await doc_ref.set({
             "id": session.id,
@@ -123,6 +201,9 @@ class FirestoreSessionService(BaseSessionService):
             "last_update_time": session.last_update_time,
             "session_json": session_json
         })
+
+        if large_state:
+            await self._save_state_keys(session.id, large_state)
 
         if self.bucket_name:
             await self._save_events_to_gcs(session.id, events)
@@ -211,6 +292,11 @@ class FirestoreSessionService(BaseSessionService):
             logger.error("Failed to validate Session JSON for %s: %s", session_id, e)
             return None
 
+        # Load large state keys and merge back into session.state
+        large_state = await self._load_state_keys(session_id)
+        for key, val in large_state.items():
+            session.state[key] = val
+
         # Load events list from GCS (or fall back to Firestore events subcollection)
         events = None
         if self.bucket_name:
@@ -290,13 +376,20 @@ class FirestoreSessionService(BaseSessionService):
             user_id: The user ID.
             session_id: The session ID.
         """
-        # Delete Firestore document and its events subcollection
+        # Delete Firestore document and its events/state subcollections
         doc_ref = self.db.collection(self.collection_name).document(session_id)
         try:
             async for event_doc in doc_ref.collection("events").stream():
                 await event_doc.reference.delete()
         except Exception as e:
             logger.error("Failed to delete events subcollection for %s: %s", session_id, e)
+            
+        try:
+            async for state_doc in doc_ref.collection("state_large").stream():
+                await state_doc.reference.delete()
+        except Exception as e:
+            logger.error("Failed to delete state_large subcollection for %s: %s", session_id, e)
+
         await doc_ref.delete()
 
         # Delete GCS artifacts and the events.json file
