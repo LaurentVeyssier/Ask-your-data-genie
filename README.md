@@ -412,7 +412,7 @@ We provisioned a production environment inside your GCP project consisting of:
 ### 2. How it is Done (Deployment Workflows)
 
 #### A. Provisioning Infrastructure (Terraform)
-The infrastructure is declared in [deployment/terraform/single-project](file:///c:/Users/lveys/Documents/SKP_Notebooks/other_projects/RAG/ask-your-data/deployment/terraform/single-project). To provision or update these resources:
+The infrastructure is declared in [deployment/terraform/single-project](deployment/terraform/single-project). To provision or update these resources:
 1.  Initialize Terraform:
     ```bash
     terraform -chdir=deployment/terraform/single-project init
@@ -423,7 +423,7 @@ The infrastructure is declared in [deployment/terraform/single-project](file:///
     ```
 
 #### B. Automated CI/CD Pipeline (GitHub Actions)
-Continuous integration and delivery is handled by [.github/workflows/deploy-to-prod.yaml](file:///c:/Users/lveys/Documents/SKP_Notebooks/other_projects/RAG/ask-your-data/.github/workflows/deploy-to-prod.yaml). 
+Continuous integration and delivery is handled by [.github/workflows/deploy-to-prod.yaml](.github/workflows/deploy-to-prod.yaml). 
 Whenever code is pushed to the `main` branch:
 1.  **Triggers**: Runs on updates to app files, the Dockerfile, or dependencies.
 2.  **Authentication**: Uses OIDC to login to GCP using the configured Workload Identity Provider.
