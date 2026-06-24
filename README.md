@@ -486,7 +486,7 @@ The application’s codebase incorporates several design decisions inspired dire
 
 #### C. Sanitize and Align LLM Request History
 *   **Skill Reference**: `google-agents-cli-adk-code`
-*   **Implementation**: In [app/agent.py](app/agent.py), the [clean_history_callback](app/agent.py#L136) function acts as an interceptor before each LLM call. It parses executable code calls and code execution results, reformats them as standard markdown blocks, and strips out `thoughtSignature` parameters. This prevents Gemini API key authorization errors caused by mutating cryptographic signatures in multi-turn chat sessions.
+*   **Implementation**: This skill covers writing custom code executors, creating callbacks (like our history sanitization). In [app/agent.py](app/agent.py), the [clean_history_callback](app/agent.py#L136) function acts as an interceptor before each LLM call. It parses executable code calls and code execution results, reformats them as standard markdown blocks, and strips out `thoughtSignature` parameters. This prevents Gemini API key authorization errors caused by mutating cryptographic signatures in multi-turn chat sessions.
 
 #### D. Offline Initializations
 *   **Skill Reference**: `google-agents-cli-eval`
