@@ -452,3 +452,52 @@ uv run agents-cli deploy
 *   **Secure Session Handling**: Conversations and large data summaries are saved as type-safe JSON objects directly inside GCS. Old files and sessions are automatically cleaned up after 7 days by the FastAPI background cleanup service.
 *   **Cloud Observability**: Requests, execution chains, and Vertex AI latency figures are visible under the **GCP Trace Explorer** portal.
 
+---
+
+## 🛠️ Google-Agents-CLI Skills & Architectural Decisions
+
+This application was developed and optimized using the **google-agents-cli** framework and its associated developer skills. By leveraging the standardized workflow, scaffolding, and operational patterns, the project directly benefits from several key architectural choices.
+
+### 1. Google-Agents-CLI Skills Suite Overview
+
+The `google-agents-cli` framework provides a collection of curated, developer-centric skills that guide development from initial architecture through deployment and monitoring:
+
+*   **`google-agents-cli-scaffold`**: Automates project creation, environment configuration, and dependency setup, establishing consistent module structures and evaluation frameworks.
+*   **`google-agents-cli-adk-code`**: Defines standard API patterns, callback contexts, tool registries, custom code execution hooks, and state persistence guidelines.
+*   **`google-agents-cli-eval`**: Establishes programmatic testing methodologies using LLM-as-judge configs to validate non-deterministic agent trajectories.
+*   **`google-agents-cli-deploy`**: Coordinates infrastructure provisioning (Terraform) and GitOps CI/CD pipelines targeting Google Cloud (Cloud Run, Artifact Registry, Secret Manager).
+*   **`google-agents-cli-observability`**: Guides distributed OpenTelemetry tracing and prompt-response logging integration.
+
+---
+
+### 2. Architectural Choices Inherent to the Skills
+
+The application’s codebase incorporates several design decisions inspired directly by these skills:
+
+#### A. CSV Pre-processing and Automated Profiling (`optimize_data_file`)
+*   **Skill Reference**: `google-agents-cli-adk-code` & `google-agents-cli-workflow`
+*   **Implementation**: In [FileSavingLocalCodeExecutor](file:///c:/Users/lveys/Documents/SKP_Notebooks/other_projects/RAG/ask-your-data/app/local_executor.py#L73), we set the property `optimize_data_file = True`.
+*   **How it Works**: When a new CSV file is uploaded, the ADK framework intercepts the request and automatically triggers a localized profiling script (`explore_df`) in the sandbox before the first LLM request. It runs pandas inspection operations (schema, column types, row counts, unique value samples) and injects this structure directly into the model's system context. This allows the Gemini model to write syntactically correct code blocks on the very first turn without having to query the file structure manually, saving round-trip latencies.
+*   **Caching & Separation**: Within a session, profiling is run exactly once and cached inside [FirestoreSessionService](file:///c:/Users/lveys/Documents/SKP_Notebooks/other_projects/RAG/ask-your-data/app/app_utils/firestore_session.py#L31)'s `_code_executor_input_files`. Submissions in a new session or thread enforce isolated sandboxes, triggering a fresh profiling run for data privacy.
+
+#### B. Secure Sandbox Execution
+*   **Skill Reference**: `google-agents-cli-adk-code`
+*   **Implementation**: Standard local executors can risk host system corruption when executing AI-generated python scripts. We implemented [FileSavingLocalCodeExecutor](file:///c:/Users/lveys/Documents/SKP_Notebooks/other_projects/RAG/ask-your-data/app/local_executor.py#L73) using a separate Python `spawn` process context, redirecting `stdout` and capturing files generated in the workspace (like interactive Plotly figures) securely.
+
+#### C. Sanitize and Align LLM Request History
+*   **Skill Reference**: `google-agents-cli-adk-code`
+*   **Implementation**: In [app/agent.py](file:///c:/Users/lveys/Documents/SKP_Notebooks/other_projects/RAG/ask-your-data/app/agent.py), the [clean_history_callback](file:///c:/Users/lveys/Documents/SKP_Notebooks/other_projects/RAG/ask-your-data/app/agent.py#L136) function acts as an interceptor before each LLM call. It parses executable code calls and code execution results, reformats them as standard markdown blocks, and strips out `thoughtSignature` parameters. This prevents Gemini API key authorization errors caused by mutating cryptographic signatures in multi-turn chat sessions.
+
+#### D. Offline Initializations
+*   **Skill Reference**: `google-agents-cli-eval`
+*   **Implementation**: Standard local web requests initialize the frontend artifact services automatically. However, offline operations (like `agents-cli eval generate`) run without a web context. We implemented [init_agent_callback](file:///c:/Users/lveys/Documents/SKP_Notebooks/other_projects/RAG/ask-your-data/app/agent.py#L199) to detect empty contexts and inject `InMemoryArtifactService` on-the-fly, preventing evaluation crashes.
+
+#### E. Systematic Evaluation Suites Over Unit Tests
+*   **Skill Reference**: `google-agents-cli-eval`
+*   **Implementation**: Rather than asserting model text output structure inside flaky pytest test cases, we maintain a programmatic evaluation suite under [tests/eval/eval_config.yaml](file:///c:/Users/lveys/Documents/SKP_Notebooks/other_projects/RAG/ask-your-data/tests/eval/eval_config.yaml). Traces generated from standard dataset runs are graded using customizable LLM-as-judge functions, scoring criteria (e.g. response quality, chart accuracy), and providing regression comparisons in HTML format.
+
+#### F. Distributed Telemetry Setup
+*   **Skill Reference**: `google-agents-cli-observability`
+*   **Implementation**: The [setup_telemetry](file:///c:/Users/lveys/Documents/SKP_Notebooks/other_projects/RAG/ask-your-data/app/app_utils/telemetry.py#L19) function sets up OpenTelemetry (OTel) parameters, exporting spans for fast API requests, agent runs, LLM calls, and code execution. It also configures prompt-response logging metadata to export logs directly to a designated GCP Storage Bucket, allowing monitoring inside the Google Cloud Trace Portal.
+
+
