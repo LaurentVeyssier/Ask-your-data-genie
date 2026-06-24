@@ -24,8 +24,10 @@ The application implements full user authentication (email + password), persiste
 
 ### 3. 💾 Hybrid Session Persistence & Recovery
 - **Local Developer Mode**: Zero-configuration runs utilizing **SQLite** (`local_users.db`) for user credentials and an in-memory session engine.
-- **Production Mode**: Persistent user document records in **GCP Firestore** and session history, while file uploads, outputs, and generated Plotly chart configurations are stored securely in **Google Cloud Storage (GCS)**.
-- **Complete Workspace Recovery**: Instantly reconstructs chat history turns, collapsible executed Python code accordions, and fully interactive Plotly graphics when returning to past sessions.
+- **Production Mode (Hybrid Store)**: 
+  - **Firestore (Native)**: Stores lightweight user account records and session metadata documents to keep database reads/writes extremely fast.
+  - **GCS Offloading**: Large multi-turn conversation event logs (which contain Python code execution strings, base64 file payloads, and data summaries) are saved as type-safe JSON files in **Google Cloud Storage (GCS)**. This completely bypasses Firestore's 1,500-byte Native Mode indexing limit and standard JSON byte serialization errors.
+- **Complete Workspace Recovery**: Instantly reconstructs chat history turns, collapsible executed Python code accordions, and fully interactive Plotly graphics when returning to past sessions (supporting fallbacks for legacy Firestore events).
 
 ### 4. 🧹 Automatic & Manual 7-Day Purging
 - Background FastAPI tasks automatically identify and clean up sessions, artifacts, and GCS storage objects older than 7 days.
@@ -46,7 +48,7 @@ ask-your-data/
 ├── app/                     # Core application source
 │   ├── app_utils/           # Helpers and database models
 │   │   ├── auth_service.py      # BCrypt hashing, JWTs, SQLite/Firestore UserStore
-│   │   ├── firestore_session.py # Firestore session engine & GCS purging
+│   │   ├── firestore_session.py # Hybrid GCS/Firestore session persistence engine & GCS purging
 │   │   ├── telemetry.py         # Google Cloud Trace and metrics setup
 │   │   └── typing.py            # Pydantic telemetry & feedback schemas
 │   ├── static/              # Frontend web application assets
