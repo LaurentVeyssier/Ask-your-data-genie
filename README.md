@@ -393,16 +393,57 @@ To temporarily turn off local tracing to the cloud, set `ENABLE_CLOUD_TRACE=Fals
 
 ---
 
-## ☁️ Deployment
+## ☁️ Deployment & CI/CD Infrastructure
 
-Deploy the application to Google Cloud Run:
+The application is deployed on **Google Cloud Run** using a fully automated GitOps CI/CD pipeline and Infrastructure-as-Code (IaC) via **Terraform**.
 
+### 1. What We Configured
+We provisioned a production environment inside your GCP project consisting of:
+*   **Google Cloud Run Service**: Runs the containerized FastAPI backend and ReAct agent securely.
+*   **Google Artifact Registry**: Stores the compiled and optimized production Docker images.
+*   **Google Cloud Storage (GCS) Bucket**: Stores session events and file artifacts, enabling complete workspace state recovery and bypassing the Firestore 1,500-byte index limit for large fields.
+*   **Google Firestore (Native Mode)**: Houses lightweight user authentication details and session metadata.
+*   **Google Secret Manager**: Securely stores the production `JWT_SECRET` and any optional API keys.
+*   **Google Cloud Trace**: Exports and monitors live traces (latency, LLM calls, sandbox steps) in real-time.
+*   **Workload Identity Federation (WIF)**: Authorizes GitHub Actions workflows to build and deploy to GCP without storing long-lived credentials (like JSON service account keys) in repository secrets.
+
+---
+
+### 2. How it is Done (Deployment Workflows)
+
+#### A. Provisioning Infrastructure (Terraform)
+The infrastructure is declared in [deployment/terraform/single-project](file:///c:/Users/lveys/Documents/SKP_Notebooks/other_projects/RAG/ask-your-data/deployment/terraform/single-project). To provision or update these resources:
+1.  Initialize Terraform:
+    ```bash
+    terraform -chdir=deployment/terraform/single-project init
+    ```
+2.  Review plans and apply configuration (replace `<YOUR_PROJECT_ID>` with your project):
+    ```bash
+    terraform -chdir=deployment/terraform/single-project apply -var="project_id=<YOUR_PROJECT_ID>"
+    ```
+
+#### B. Automated CI/CD Pipeline (GitHub Actions)
+Continuous integration and delivery is handled by [.github/workflows/deploy-to-prod.yaml](file:///c:/Users/lveys/Documents/SKP_Notebooks/other_projects/RAG/ask-your-data/.github/workflows/deploy-to-prod.yaml). 
+Whenever code is pushed to the `main` branch:
+1.  **Triggers**: Runs on updates to app files, the Dockerfile, or dependencies.
+2.  **Authentication**: Uses OIDC to login to GCP using the configured Workload Identity Provider.
+3.  **Build**: Compiles a production Docker image using our multi-stage BuildKit optimizations.
+4.  **Register**: Pushes the image to Google Artifact Registry.
+5.  **Deploy**: Deploys the new container version using `google-agents-cli deploy` to Cloud Run.
+
+#### C. Manual CLI Deployment
+If you want to deploy the application manually from your local terminal:
 ```bash
 gcloud config set project <YOUR_PROJECT_ID>
-agents-cli deploy
+uv run agents-cli deploy
 ```
 
-For setting up full infrastructure pipelines (Terraform) or continuous integration pipelines, you can run:
-```bash
-agents-cli scaffold enhance
-```
+---
+
+### 3. Final Result & Verification
+
+*   **Production URL**: The live application is hosted on Google Cloud Run.
+*   **Automated Environment Selectors**: Accessing the production domain automatically locks the frontend's runtime selector to **Deployed Agent (Cloud)** and disables selection of the local subprocess runtime.
+*   **Secure Session Handling**: Conversations and large data summaries are saved as type-safe JSON objects directly inside GCS. Old files and sessions are automatically cleaned up after 7 days by the FastAPI background cleanup service.
+*   **Cloud Observability**: Requests, execution chains, and Vertex AI latency figures are visible under the **GCP Trace Explorer** portal.
+
