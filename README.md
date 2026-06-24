@@ -476,28 +476,29 @@ The application’s codebase incorporates several design decisions inspired dire
 
 #### A. CSV Pre-processing and Automated Profiling (`optimize_data_file`)
 *   **Skill Reference**: `google-agents-cli-adk-code` & `google-agents-cli-workflow`
-*   **Implementation**: In [FileSavingLocalCodeExecutor](file:///c:/Users/lveys/Documents/SKP_Notebooks/other_projects/RAG/ask-your-data/app/local_executor.py#L73), we set the property `optimize_data_file = True`.
+*   **Implementation**: In [FileSavingLocalCodeExecutor](app/local_executor.py#L73), we set the property `optimize_data_file = True`.
 *   **How it Works**: When a new CSV file is uploaded, the ADK framework intercepts the request and automatically triggers a localized profiling script (`explore_df`) in the sandbox before the first LLM request. It runs pandas inspection operations (schema, column types, row counts, unique value samples) and injects this structure directly into the model's system context. This allows the Gemini model to write syntactically correct code blocks on the very first turn without having to query the file structure manually, saving round-trip latencies.
-*   **Caching & Separation**: Within a session, profiling is run exactly once and cached inside [FirestoreSessionService](file:///c:/Users/lveys/Documents/SKP_Notebooks/other_projects/RAG/ask-your-data/app/app_utils/firestore_session.py#L31)'s `_code_executor_input_files`. Submissions in a new session or thread enforce isolated sandboxes, triggering a fresh profiling run for data privacy.
+*   **Caching & Separation**: Within a session, profiling is run exactly once and cached inside [FirestoreSessionService](app/app_utils/firestore_session.py#L31)'s `_code_executor_input_files`. Submissions in a new session or thread enforce isolated sandboxes, triggering a fresh profiling run for data privacy.
 
 #### B. Secure Sandbox Execution
 *   **Skill Reference**: `google-agents-cli-adk-code`
-*   **Implementation**: Standard local executors can risk host system corruption when executing AI-generated python scripts. We implemented [FileSavingLocalCodeExecutor](file:///c:/Users/lveys/Documents/SKP_Notebooks/other_projects/RAG/ask-your-data/app/local_executor.py#L73) using a separate Python `spawn` process context, redirecting `stdout` and capturing files generated in the workspace (like interactive Plotly figures) securely.
+*   **Implementation**: Standard local executors can risk host system corruption when executing AI-generated python scripts. We implemented [FileSavingLocalCodeExecutor](app/local_executor.py#L73) using a separate Python `spawn` process context, redirecting `stdout` and capturing files generated in the workspace (like interactive Plotly figures) securely.
 
 #### C. Sanitize and Align LLM Request History
 *   **Skill Reference**: `google-agents-cli-adk-code`
-*   **Implementation**: In [app/agent.py](file:///c:/Users/lveys/Documents/SKP_Notebooks/other_projects/RAG/ask-your-data/app/agent.py), the [clean_history_callback](file:///c:/Users/lveys/Documents/SKP_Notebooks/other_projects/RAG/ask-your-data/app/agent.py#L136) function acts as an interceptor before each LLM call. It parses executable code calls and code execution results, reformats them as standard markdown blocks, and strips out `thoughtSignature` parameters. This prevents Gemini API key authorization errors caused by mutating cryptographic signatures in multi-turn chat sessions.
+*   **Implementation**: In [app/agent.py](app/agent.py), the [clean_history_callback](app/agent.py#L136) function acts as an interceptor before each LLM call. It parses executable code calls and code execution results, reformats them as standard markdown blocks, and strips out `thoughtSignature` parameters. This prevents Gemini API key authorization errors caused by mutating cryptographic signatures in multi-turn chat sessions.
 
 #### D. Offline Initializations
 *   **Skill Reference**: `google-agents-cli-eval`
-*   **Implementation**: Standard local web requests initialize the frontend artifact services automatically. However, offline operations (like `agents-cli eval generate`) run without a web context. We implemented [init_agent_callback](file:///c:/Users/lveys/Documents/SKP_Notebooks/other_projects/RAG/ask-your-data/app/agent.py#L199) to detect empty contexts and inject `InMemoryArtifactService` on-the-fly, preventing evaluation crashes.
+*   **Implementation**: Standard local web requests initialize the frontend artifact services automatically. However, offline operations (like `agents-cli eval generate`) run without a web context. We implemented [init_agent_callback](app/agent.py#L199) to detect empty contexts and inject `InMemoryArtifactService` on-the-fly, preventing evaluation crashes.
 
 #### E. Systematic Evaluation Suites Over Unit Tests
 *   **Skill Reference**: `google-agents-cli-eval`
-*   **Implementation**: Rather than asserting model text output structure inside flaky pytest test cases, we maintain a programmatic evaluation suite under [tests/eval/eval_config.yaml](file:///c:/Users/lveys/Documents/SKP_Notebooks/other_projects/RAG/ask-your-data/tests/eval/eval_config.yaml). Traces generated from standard dataset runs are graded using customizable LLM-as-judge functions, scoring criteria (e.g. response quality, chart accuracy), and providing regression comparisons in HTML format.
+*   **Implementation**: Rather than asserting model text output structure inside flaky pytest test cases, we maintain a programmatic evaluation suite under [tests/eval/eval_config.yaml](tests/eval/eval_config.yaml). Traces generated from standard dataset runs are graded using customizable LLM-as-judge functions, scoring criteria (e.g. response quality, chart accuracy), and providing regression comparisons in HTML format.
 
 #### F. Distributed Telemetry Setup
 *   **Skill Reference**: `google-agents-cli-observability`
-*   **Implementation**: The [setup_telemetry](file:///c:/Users/lveys/Documents/SKP_Notebooks/other_projects/RAG/ask-your-data/app/app_utils/telemetry.py#L19) function sets up OpenTelemetry (OTel) parameters, exporting spans for fast API requests, agent runs, LLM calls, and code execution. It also configures prompt-response logging metadata to export logs directly to a designated GCP Storage Bucket, allowing monitoring inside the Google Cloud Trace Portal.
+*   **Implementation**: The [setup_telemetry](app/app_utils/telemetry.py#L19) function sets up OpenTelemetry (OTel) parameters, exporting spans for fast API requests, agent runs, LLM calls, and code execution. It also configures prompt-response logging metadata to export logs directly to a designated GCP Storage Bucket, allowing monitoring inside the Google Cloud Trace Portal.
+
 
 
