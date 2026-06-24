@@ -169,6 +169,11 @@ async def clean_history_callback(
                 result_text = f"\n```\nCode execution result:\n{part.code_execution_result.output}\n```\n"
                 new_parts.append(types.Part.from_text(text=result_text))
                 role = "user"
+            elif getattr(part, "thought", None) or getattr(part, "thought_signature", None):
+                # Skip thought and thought_signature parts in the sanitized history
+                # because we are mutating the conversation to plain text blocks,
+                # which corrupts any cryptographic thought signatures.
+                continue
             elif part.text:
                 new_parts.append(part)
             else:
