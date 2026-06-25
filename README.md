@@ -33,7 +33,9 @@ The application implements full user authentication (email + password), persiste
 - **Production Mode (Hybrid Store)**: 
   - **Firestore (Native)**: Stores lightweight user account records and session metadata documents to keep database reads/writes extremely fast.
   - **GCS Offloading**: Large multi-turn conversation event logs (which contain Python code execution strings, base64 file payloads, and data summaries) are saved as type-safe JSON files in **Google Cloud Storage (GCS)**. This completely bypasses Firestore's 1,500-byte Native Mode indexing limit and standard JSON byte serialization errors.
-- **Complete Workspace Recovery**: Instantly reconstructs chat history turns, collapsible executed Python code accordions, and fully interactive Plotly graphics when returning to past sessions (supporting fallbacks for legacy Firestore events).
+- **Complete Workspace & File Recovery**: Instantly reconstructs chat history turns, collapsible executed Python code accordions, and fully interactive Plotly graphics when resuming a session.
+  - **No File Resubmission Required**: All dataset files uploaded within a session are saved directly inside the persistent session state. When you resume a session, all previously uploaded files are automatically restored to the code execution workspace. You can continue querying them immediately without resubmitting them.
+  - **Multi-File Reasoning**: If multiple files are uploaded inside the same session, they are all written to the active workspace environment concurrently, allowing the agent to dynamically select, load, and perform cross-file operations (like SQL-like joins) based on your natural language queries.
 
 ### 4. 🧹 Automatic & Manual 7-Day Purging
 - Background FastAPI tasks automatically identify and clean up sessions, artifacts, and GCS storage objects older than 7 days.
