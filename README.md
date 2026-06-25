@@ -19,6 +19,9 @@ The application implements full user authentication (email + password), persiste
   - **Session-Scoped Caching**: Within the same conversation thread, profiling results are saved in the persistent session state (even across logouts and logins). Subsequent messages instantly reuse this context, bypassing re-execution and eliminating extra LLM queries.
   - **New Session Separation**: For data privacy and security, starting a new chat thread (session) initializes a clean slate. Uploading the same file in a new thread will trigger a one-time profile run to initialize that session's isolated cache.
 - **Interactive Visualizations**: Generates rich dynamic graphics, exporting output directly as interactive [Plotly](https://plotly.com/javascript/) charts rendered seamlessly on the frontend.
+- **Ephemeral Shareable Dashboards ([here.now](https://here.now) Integration)**: With a single click on the "Share" button, users can securely publish their latest analysis insights and accompanying Plotly graphic as a standalone, beautifully styled dashboard. Powered by [share_service.py](app/app_utils/share_service.py).
+  - **Dynamic Layout Toggling**: The shared dashboard provides a responsive layout-toggle button, allowing viewers to switch instantly between a side-by-side **Split View** and a vertical **Stacked View**. Plotly charts dynamically resize automatically to occupy optimal visual real estate.
+  - **24h Expiration & Claim Link**: Anonymous shared dashboards expire automatically after 24 hours. The publisher is also provided with a unique **Claim URL**, allowing them to authenticate on `here.now` to retain, update, password-protect, or delete their shared page.
 
 ### 2. 🔐 User Authentication & Security
 - **Secure Credentials**: Hashes and verifies passwords securely using **bcrypt**.
@@ -97,6 +100,7 @@ cp .env.example .env
 | `LOGS_BUCKET_NAME` | GCP Storage Bucket name for session file artifacts | `your-gcs-bucket-name` |
 | `GOOGLE_GENAI_USE_VERTEXAI` | Backend selector: `'True'` for GCP Vertex AI, `'False'` for Gemini Developer API | `True` |
 | `GEMINI_API_KEY` | API Key for Gemini Developer API (required when `GOOGLE_GENAI_USE_VERTEXAI=False`) | *None* |
+| `HERENOW_API_KEY` | Optional here.now API key to publish to a specific user account. If omitted, pages are published anonymously | *None* |
 
 ---
 
