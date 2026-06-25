@@ -239,6 +239,38 @@ def generate_share_html(title: str, text_html: str, chart_json: Optional[Dict[st
             position: relative;
         }}
 
+        main.layout-stacked {{
+            grid-template-columns: 1fr !important;
+        }}
+
+        main.layout-stacked .chart-container {{
+            height: 550px;
+            min-height: 500px;
+        }}
+
+        .layout-toggle-btn {{
+            background: rgba(255,255,255,0.06);
+            border: 1px solid var(--card-border);
+            color: var(--text-primary);
+            padding: 0.4rem 0.8rem;
+            border-radius: 6px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            font-family: inherit;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }}
+
+        .layout-toggle-btn:hover {{
+            background: rgba(255, 255, 255, 0.12);
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+        }}
+
+
         footer {{
             max-width: 1200px;
             width: 100%;
@@ -265,8 +297,11 @@ def generate_share_html(title: str, text_html: str, chart_json: Optional[Dict[st
         <div class="logo">
             <i class="fa-solid fa-chart-pie"></i> Ask-Your-Data Genie
         </div>
-        <div class="badge">
-            <i class="fa-regular fa-clock"></i> Shared Analysis (Expires in 24h)
+        <div class="header-actions" style="display: flex; align-items: center; gap: 1rem;">
+            {"<button id=\"layout-toggle-btn\" class=\"layout-toggle-btn\" title=\"Toggle Layout (Split / Stacked)\"><i class=\"fa-solid fa-square-poll-horizontal\"></i> <span>Stacked View</span></button>" if has_chart else ""}
+            <div class="badge">
+                <i class="fa-regular fa-clock"></i> Shared Analysis (Expires in 24h)
+            </div>
         </div>
     </header>
 
@@ -314,6 +349,29 @@ def generate_share_html(title: str, text_html: str, chart_json: Optional[Dict[st
             }}
             
             Plotly.newPlot('chart', data, layout, {{ responsive: true }});
+
+            // Layout Toggle Action
+            const layoutBtn = document.getElementById("layout-toggle-btn");
+            if (layoutBtn) {{
+                layoutBtn.addEventListener("click", function() {{
+                    const mainEl = document.querySelector("main");
+                    const isStacked = mainEl.classList.toggle("layout-stacked");
+                    
+                    const icon = layoutBtn.querySelector("i");
+                    const label = layoutBtn.querySelector("span");
+                    
+                    if (isStacked) {{
+                        icon.className = "fa-solid fa-columns";
+                        label.textContent = "Split View";
+                    }} else {{
+                        icon.className = "fa-solid fa-square-poll-horizontal";
+                        label.textContent = "Stacked View";
+                    }}
+                    
+                    // Force Plotly to resize to new dimensions
+                    Plotly.Plots.resize('chart');
+                }});
+            }}
         }});
     </script>''' if has_chart else ''}
 </body>
