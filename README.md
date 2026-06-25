@@ -64,7 +64,7 @@ ask-your-data/
 │   │   └── style.css            # Custom CSS tokens, animation keyframes, scrollbars
 │   ├── agent.py             # Agent prompt logic and tools registry
 │   ├── fast_api_app.py      # FastAPI routing, security dependencies, admin & share endpoints
-│   └── local_executor.py    # Python code execution sandbox
+│   └── local_executor.py    # Isolated subprocess code runner (sandbox offloaded to container)
 ├── tests/                   # Automated validation suite
 │   ├── eval/                # Systematic evaluation suite (ADK)
 │   │   ├── datasets/            # Target evaluation JSON datasets
