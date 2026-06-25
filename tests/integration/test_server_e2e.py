@@ -319,3 +319,48 @@ def test_admin_flow(server_fixture: subprocess.Popen[str]) -> None:
     assert cleanup_res.status_code == 200
     assert cleanup_res.json()["status"] == "success"
 
+
+def test_share_here_now(server_fixture: subprocess.Popen[str]) -> None:
+    """Test the here.now sharing functionality."""
+    logger.info("Starting share here-now test")
+
+    # 1. Register a user to get token
+    import uuid
+    unique_suffix = uuid.uuid4().hex[:6]
+    email = f"share_user_{unique_suffix}@example.com"
+    password = "password123"
+
+    reg_res = requests.post(
+        f"{BASE_URL}/api/auth/register",
+        json={"email": email, "password": password},
+        headers=HEADERS,
+        timeout=10
+    )
+    assert reg_res.status_code == 200
+    token = reg_res.json()["token"]
+
+    # 2. Call share endpoint
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    payload = {
+        "title": "Test Share",
+        "textHtml": "<h3>Sales Analysis</h3><p>Total sales of widgets: <b>$1,500</b></p>",
+        "chartJson": {
+            "data": [{"x": ["widgets", "gadgets"], "y": [1500, 800], "type": "bar"}],
+            "layout": {"title": "Sales by Product"}
+        }
+    }
+
+    share_res = requests.post(
+        f"{BASE_URL}/api/share/here-now",
+        json=payload,
+        headers=headers,
+        timeout=30
+    )
+
+    assert share_res.status_code == 200
+    share_data = share_res.json()
+    assert "siteUrl" in share_data
+    assert share_data["siteUrl"].startswith("https://")
+    assert "claimUrl" in share_data
+
+

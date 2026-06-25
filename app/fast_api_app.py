@@ -42,6 +42,8 @@ from pydantic import BaseModel
 from app.agent import root_agent
 from app.app_utils.telemetry import setup_telemetry
 from app.app_utils.typing import Feedback
+from app.app_utils.share_service import generate_share_html, publish_to_herenow
+
 from app.app_utils.auth_service import (
     UserStore,
     hash_password,
@@ -221,6 +223,14 @@ class ChatRequest(BaseModel):
     message: str
     sessionId: Optional[str] = None
     file: Optional[FilePayload] = None
+
+
+class ShareRequest(BaseModel):
+    """Pydantic model representing the share request."""
+    title: str
+    textHtml: str
+    chartJson: Optional[Dict[str, Any]] = None
+
 
 
 @app.post("/api/auth/register")
@@ -634,6 +644,39 @@ async def get_artifact(
         raise HTTPException(
             status_code=404, detail=f"Failed to load artifact {filename}: {e}"
         )
+
+
+@app.post("/api/share/here-now")
+async def share_here_now(
+    request: ShareRequest,
+    current_user: str = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Generates a self-contained HTML page and publishes it anonymously to here.now.
+
+    Args:
+        request: The ShareRequest containing title, HTML response, and Plotly data.
+        current_user: The authenticated user's ID.
+
+    Returns:
+        A dictionary containing the published site URL and claim URL.
+    """
+    html_content = generate_share_html(
+        title=request.title,
+        text_html=request.textHtml,
+        chart_json=request.chartJson
+    )
+
+    result = publish_to_herenow(html_content)
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=500,
+            detail=result.get("error", "Failed to publish to here.now")
+        )
+
+    return {
+        "siteUrl": result["siteUrl"],
+        "claimUrl": result["claimUrl"]
+    }
 
 
 @app.get("/")

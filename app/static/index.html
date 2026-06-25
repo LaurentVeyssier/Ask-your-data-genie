@@ -137,6 +137,9 @@
                         <button id="export-chart-btn" class="viz-btn hidden" title="Export HTML">
                             <i class="fa-solid fa-download"></i> Export
                         </button>
+                        <button id="share-now-btn" class="viz-btn hidden" title="Share via here.now">
+                            <i class="fa-solid fa-share-nodes"></i> Share
+                        </button>
                     </div>
                 </div>
                 
@@ -293,6 +296,49 @@
                     <div id="admin-cleanup-feedback" class="cleanup-feedback hidden">
                         <i class="fa-solid fa-circle-check"></i> Cleanup task triggered in background.
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Share to here.now Modal -->
+    <div id="share-modal" class="auth-modal-overlay hidden">
+        <div class="auth-modal-card" style="max-width: 450px;">
+            <div class="auth-modal-header" style="border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+                <div class="logo" style="display: flex; align-items: center; gap: 0.5rem; font-weight: 700; font-size: 1.1rem;">
+                    <i class="fa-solid fa-share-nodes" style="color: var(--accent-cyan);"></i>
+                    <h2 id="share-modal-title" style="margin: 0; font-size: 1.1rem; color: var(--text-primary);">Share Analysis Dashboard</h2>
+                </div>
+                <button id="share-close-btn" class="admin-close-btn" title="Close Panel" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem;">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <div id="share-loading-container" class="share-loading-container">
+                <div class="typing-indicator" style="margin: 2rem auto; display: flex; justify-content: center; gap: 0.5rem;">
+                    <div class="typing-dot" style="background-color: var(--accent-cyan);"></div>
+                    <div class="typing-dot" style="background-color: var(--accent-cyan); animation-delay: 0.2s;"></div>
+                    <div class="typing-dot" style="background-color: var(--accent-cyan); animation-delay: 0.4s;"></div>
+                </div>
+                <p style="text-align: center; color: var(--text-secondary); font-size: 0.9rem;">Generating dashboard and publishing to here.now...</p>
+            </div>
+
+            <div id="share-result-container" class="share-result-container hidden" style="margin-top: 1.5rem;">
+                <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.75rem;">Your analysis and visualization are now live! Anyone with this link can view it:</p>
+                
+                <div class="share-link-wrapper" style="display: flex; gap: 0.5rem; background: rgba(0,0,0,0.25); border: 1px solid var(--border-color); padding: 0.5rem; border-radius: 8px; align-items: center; margin-bottom: 1rem;">
+                    <input type="text" id="share-url-input" readonly style="flex: 1; background: none; border: none; color: var(--text-primary); font-family: monospace; font-size: 0.85rem; outline: none; padding: 0.25rem;">
+                    <button id="share-copy-btn" class="viz-btn" style="padding: 0.35rem 0.75rem; font-size: 0.8rem; margin: 0; background: var(--accent-cyan); color: #000; border: none; font-weight: 600;">
+                        <i class="fa-regular fa-copy"></i> Copy
+                    </button>
+                </div>
+
+                <div class="share-claim-wrapper hidden" id="share-claim-wrapper" style="background: rgba(6, 182, 212, 0.08); border: 1px solid rgba(6, 182, 212, 0.2); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                    <p style="font-size: 0.85rem; color: var(--text-primary); font-weight: 500; margin: 0; display: flex; align-items: center; gap: 0.25rem;"><i class="fa-solid fa-circle-info" style="color: var(--accent-cyan);"></i> Ephemeral Publish</p>
+                    <p style="font-size: 0.8rem; color: var(--text-secondary); margin: 0;">This anonymous dashboard will automatically expire in 24 hours. Click the button below to claim it and save it permanently on your account.</p>
+                    <a href="#" id="share-claim-link" target="_blank" class="auth-btn" style="text-align: center; text-decoration: none; padding: 0.5rem; font-size: 0.85rem; background: rgba(6, 182, 212, 0.15); border: 1px solid rgba(6, 182, 212, 0.3); color: var(--accent-cyan); display: inline-block; margin-top: 0.25rem; font-weight: 500;">
+                        <i class="fa-solid fa-circle-check"></i> Claim Permanent Site
+                    </a>
                 </div>
             </div>
         </div>
