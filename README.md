@@ -55,14 +55,15 @@ ask-your-data/
 │   ├── app_utils/           # Helpers and database models
 │   │   ├── auth_service.py      # BCrypt hashing, JWTs, SQLite/Firestore UserStore
 │   │   ├── firestore_session.py # Hybrid GCS/Firestore session persistence engine & GCS purging
+│   │   ├── share_service.py     # Ephemeral here.now sharing client & standalone HTML generator
 │   │   ├── telemetry.py         # Google Cloud Trace and metrics setup
 │   │   └── typing.py            # Pydantic telemetry & feedback schemas
 │   ├── static/              # Frontend web application assets
-│   │   ├── app.js               # UI controller, Plotly renderer, Admin API clients
-│   │   ├── index.html           # Glassmorphic layout, chat panels, admin portal
+│   │   ├── app.js               # UI controller, Plotly renderer, Admin/Share API clients
+│   │   ├── index.html           # Glassmorphic layout, chat panels, admin & share modals
 │   │   └── style.css            # Custom CSS tokens, animation keyframes, scrollbars
 │   ├── agent.py             # Agent prompt logic and tools registry
-│   ├── fast_api_app.py      # FastAPI routing, security dependencies, and admin endpoints
+│   ├── fast_api_app.py      # FastAPI routing, security dependencies, admin & share endpoints
 │   └── local_executor.py    # Python code execution sandbox
 ├── tests/                   # Automated validation suite
 │   ├── eval/                # Systematic evaluation suite (ADK)
