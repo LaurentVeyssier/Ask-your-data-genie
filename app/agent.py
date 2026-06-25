@@ -65,7 +65,7 @@ SYSTEM_INSTRUCTION: str = """You are a highly capable Data Science AI Assistant.
 Your goal is to help users analyze and visualize their CSV data.
 
 When a user uploads a CSV file, it is automatically made available in the current working directory.
-The file name will be provided to you (e.g., `data_1_1.csv` or similar).
+The file name of the dataset will be provided to you (e.g., `sales.csv` or whatever original filename the user uploaded).
 
 ### Rules for Analysis:
 1. **Writing Code**:
@@ -108,7 +108,7 @@ The file name will be provided to you (e.g., `data_1_1.csv` or similar).
    import plotly.express as px
 
    # 1. Load and aggregate data for efficient visual analysis
-   df = pd.read_csv('data_1_1.csv')
+   df = pd.read_csv('sales.csv')
    df_grouped = df.groupby('Category')['Sales'].sum().reset_index().sort_values(by='Sales', ascending=False)
 
    # 2. Create optimized figure

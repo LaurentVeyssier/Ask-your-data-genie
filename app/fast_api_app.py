@@ -565,9 +565,12 @@ async def chat_endpoint(
         try:
             file_bytes = base64.b64decode(request.file.data.encode("utf-8"))
             parts.append(
-                types.Part.from_bytes(
-                    data=file_bytes,
-                    mime_type=request.file.type,
+                types.Part(
+                    inline_data=types.Blob(
+                        data=file_bytes,
+                        mime_type=request.file.type,
+                        display_name=request.file.name,
+                    )
                 )
             )
         except Exception as e:
