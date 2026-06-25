@@ -234,11 +234,9 @@ def generate_share_html(title: str, text_html: str, chart_json: Optional[Dict[st
         /* Visualization Container */
         .chart-container {{
             width: 100%;
-            height: 500px;
-            min-height: 400px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            flex: 1;
+            min-height: 450px;
+            position: relative;
         }}
 
         footer {{
@@ -296,6 +294,10 @@ def generate_share_html(title: str, text_html: str, chart_json: Optional[Dict[st
         document.addEventListener("DOMContentLoaded", function() {{
             const data = {chart_data_str};
             const layout = {chart_layout_str};
+            
+            // Remove hardcoded width and height to force true layout responsiveness
+            delete layout.width;
+            delete layout.height;
             
             // Format layout for dark theme
             layout.paper_bgcolor = "rgba(0,0,0,0)";
